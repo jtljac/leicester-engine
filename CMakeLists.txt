@@ -15,3 +15,6 @@ add_library(leicester-engine SHARED)
 add_subdirectory(Third-Party)
 
 add_subdirectory(Engine)
+
+# Testing
+add_subdirectory(TestProject)

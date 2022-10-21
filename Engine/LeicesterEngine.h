@@ -6,8 +6,10 @@
 
 class LeicesterEngine {
 protected:
-    Renderer* renderer;
-    double lastFrameTime, frameDelta;
+    Renderer* renderer = nullptr;
+    double lastFrameTime = 0, frameDelta = 0;
 public:
     virtual int initialise();
+
+    void setRenderer(Renderer* pRenderer);
 };

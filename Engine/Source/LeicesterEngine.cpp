@@ -33,3 +33,7 @@ int LeicesterEngine::initialise() {
 
     return 0;
 }
+
+void LeicesterEngine::setRenderer(Renderer* pRenderer) {
+    this->renderer = pRenderer;
+}
