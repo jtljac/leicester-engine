@@ -1,0 +1,3 @@
+[submodule "leicester-engine/third-party/glm"]
+	path = leicester-engine/third-party/glm
+	url = https://github.com/g-truc/glm

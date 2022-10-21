@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.22)
+
+# GLM for Maths
+find_package(glm REQUIRED)
+target_link_libraries(leicester-engine glm)
+
+# Vulkan
+find_package(Vulkan REQUIRED)
+target_link_libraries(leicester-engine vulkan)
+
+# GLFW for window and Inputs
+find_package(glfw3 3.3 REQUIRED)
+target_link_libraries(leicester-engine glfw)
