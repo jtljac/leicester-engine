@@ -4,11 +4,33 @@
 
 #include "../Renderer.h"
 
-int Renderer::initialise(EngineSettings& settings) {
-    window = glfwCreateWindow(settings.windowWidth, settings.windowWidth, settings.windowTitle.c_str(), NULL, NULL);
+
+
+void Renderer::setupGLFWHints() {}
+
+int Renderer::initialiseGlfw(EngineSettings& settings) {
+    glfwInit();
+    setupGLFWHints();
+
+    this->window = glfwCreateWindow(settings.windowWidth, settings.windowWidth, settings.windowTitle.c_str(), NULL, NULL);
     if (!window) {
         return -1;
     }
 
-    // Setup callbacks
+    glfwSetWindowUserPointer(this->window, this);
+
+    setupGlfwCallbacks();
+}
+
+int Renderer::initialise(EngineSettings& settings) {
+    initialiseGlfw(settings);
+
+}
+
+void Renderer::setupGlfwCallbacks() {
+    glfwSetFramebufferSizeCallback(window, )
+}
+
+bool Renderer::wantsToClose() {
+    return glfwWindowShouldClose(window);
 }

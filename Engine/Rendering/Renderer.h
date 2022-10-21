@@ -17,6 +17,11 @@
 
 class Renderer {
     GLFWwindow* window;
+protected:
+    virtual int initialiseGlfw(EngineSettings& settings);
+    virtual void setupGLFWHints();
+
+    virtual void glfwResizeWindow(GLFWwindow* window, int width, int height) = 0;
 public:
     virtual ~Renderer() = 0;
 
@@ -25,9 +30,15 @@ public:
      */
     virtual int initialise(EngineSettings& settings);
 
-    GLFWwindow* getWindow() {
-        return window;
-    }
+    /**
+     * Setup callbacks for GLFW Events
+     */
+     virtual void setupGlfwCallbacks();
+
+    /**
+     * Get if the windows wants to close
+     */
+    bool wantsToClose();
 
     virtual void drawFrame(double deltaTime) = 0;
 };
