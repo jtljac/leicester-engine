@@ -4,33 +4,44 @@
 
 #include "../Renderer.h"
 
+Renderer::~Renderer() {
+    if (this->window != nullptr) {
+        glfwDestroyWindow(window);
+        window = nullptr;
+    }
+};
 
+void Renderer::setupGLFWHints() {
+    glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 
-void Renderer::setupGLFWHints() {}
+}
 
 int Renderer::initialiseGlfw(EngineSettings& settings) {
     glfwInit();
     setupGLFWHints();
 
     this->window = glfwCreateWindow(settings.windowWidth, settings.windowWidth, settings.windowTitle.c_str(), NULL, NULL);
-    if (!window) {
+    if (window == nullptr) {
         return -1;
     }
 
     glfwSetWindowUserPointer(this->window, this);
 
     setupGlfwCallbacks();
+    return 0;
 }
 
-int Renderer::initialise(EngineSettings& settings) {
-    initialiseGlfw(settings);
+bool Renderer::initialise(EngineSettings& settings) {
+    if (!initialiseGlfw(settings)) return false;
 
+    return true;
 }
 
 void Renderer::setupGlfwCallbacks() {
-    glfwSetFramebufferSizeCallback(window, )
 }
 
 bool Renderer::wantsToClose() {
-    return glfwWindowShouldClose(window);
+    return this->window == nullptr || glfwWindowShouldClose(this->window);
 }
+
+void Renderer::cleanup() {}
