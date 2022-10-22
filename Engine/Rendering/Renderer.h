@@ -16,19 +16,26 @@
 #include <vector>
 
 class Renderer {
-    GLFWwindow* window;
 protected:
+    GLFWwindow* window = nullptr;
     virtual int initialiseGlfw(EngineSettings& settings);
     virtual void setupGLFWHints();
-
-    virtual void glfwResizeWindow(GLFWwindow* window, int width, int height) = 0;
 public:
+    Renderer() = default;
     virtual ~Renderer() = 0;
 
     /**
      * Initialise the renderer
      */
-    virtual int initialise(EngineSettings& settings);
+    virtual bool initialise(EngineSettings& settings);
+
+    /**
+     * Draw a frame
+     * @param deltaTime The length of the last frame in seconds
+     */
+    virtual void drawFrame(double deltaTime) = 0;
+
+    virtual void cleanup();
 
     /**
      * Setup callbacks for GLFW Events
@@ -39,6 +46,4 @@ public:
      * Get if the windows wants to close
      */
     bool wantsToClose();
-
-    virtual void drawFrame(double deltaTime) = 0;
 };

@@ -10,7 +10,7 @@ IF(NOT MSVC)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
 ENDIF()
 
-add_library(leicester-engine SHARED)
+add_library(leicester-engine STATIC)
 
 add_subdirectory(Third-Party)
 

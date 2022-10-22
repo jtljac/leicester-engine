@@ -20,7 +20,7 @@ int LeicesterEngine::initialise() {
     double currentFrameTime;
 
     // Main Loop
-    while(!glfwWindowShouldClose(renderer->getWindow())) {
+    while(!renderer->wantsToClose()) {
         // Get frame delta
         currentFrameTime = glfwGetTime();
         this->frameDelta = currentFrameTime - lastFrameTime;

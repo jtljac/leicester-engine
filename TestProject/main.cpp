@@ -3,10 +3,10 @@
 //
 
 #include <LeicesterEngine.h>
-#include <Rendering/Vulkan
+#include <Rendering/Vulkan/VulkanRenderer.h>
 
 int main() {
     LeicesterEngine engine;
-
+    engine.setRenderer(new VulkanRenderer());
     engine.initialise();
 }
