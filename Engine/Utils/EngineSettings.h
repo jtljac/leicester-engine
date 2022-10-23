@@ -5,10 +5,14 @@
 #pragma once
 #include <string>
 
+
+
 struct EngineSettings {
     // Window
     const int windowWidth = 1366;
     const int windowHeight = 768;
+
+    const int bufferCount = 2;
 
     const std::string windowTitle = "Leicester Engine";
 };

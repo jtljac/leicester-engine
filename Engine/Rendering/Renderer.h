@@ -18,7 +18,17 @@
 class Renderer {
 protected:
     GLFWwindow* window = nullptr;
-    virtual int initialiseGlfw(EngineSettings& settings);
+
+    /**
+     * Initialise glfw settings
+     * @param settings the engine settings
+     * @return
+     */
+    virtual bool initialiseGlfw(EngineSettings& settings);
+
+    /**
+     * Set glfw hits
+     */
     virtual void setupGLFWHints();
 public:
     Renderer() = default;
@@ -26,6 +36,7 @@ public:
 
     /**
      * Initialise the renderer
+     * @param settings the engine settings
      */
     virtual bool initialise(EngineSettings& settings);
 
@@ -33,8 +44,11 @@ public:
      * Draw a frame
      * @param deltaTime The length of the last frame in seconds
      */
-    virtual void drawFrame(double deltaTime) = 0;
+    virtual void drawFrame(double deltaTime, double gameTime) = 0;
 
+    /**
+     * Cleanup the renderer so it's ready for destruction
+     */
     virtual void cleanup();
 
     /**

@@ -2,6 +2,8 @@
 // Created by jacob on 21/10/22.
 //
 
+#include <cmath>
+
 #include "../VulkanRenderer.h"
 #include <Utils/Logger.h>
 
@@ -11,6 +13,11 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     Renderer::initialise(settings);
 
     if (!this->initVulkan(settings)) return false;
+    if (!this->initSwapchain(settings)) return false;
+    if (!this->initRenderpass(settings)) return false;
+    if (!this->initFramebuffers(settings)) return false;
+    if (!this->initSyncObjects(settings)) return false;
+
     return true;
 }
 
@@ -25,82 +32,353 @@ void VulkanRenderer::setupGLFWHints() {
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 }
 
-void VulkanRenderer::drawFrame(double deltaTime) {
-
-}
-
 bool VulkanRenderer::initVulkan(EngineSettings& settings) {
-    vkb::InstanceBuilder instanceBuilder;
 
-    instanceBuilder
-            .set_engine_name("Leicester Engine")
-            .set_app_name(settings.windowTitle.c_str())
-            .request_validation_layers(true)
-            .require_api_version(1, 1, 0)
-            .use_default_debug_messenger();
+    vkb::Instance vkbInstance;
+    // Setup Vulkan Instance
+    {
+        vkb::InstanceBuilder instanceBuilder;
+        instanceBuilder
+                .set_engine_name("leicester-engine")
+                .set_app_name(settings.windowTitle.c_str())
+                .request_validation_layers(true)
+                .require_api_version(1, 1, 0)
+                .use_default_debug_messenger();
 
-    auto systemInfo = vkb::SystemInfo::get_system_info();
-
-    if (!systemInfo.has_value()) {
-        Logger::error(systemInfo.error().message());
-        return false;
-    }
-    for (const auto& layer: this->validationLayers){
-        if (systemInfo->is_layer_available(layer)) instanceBuilder.enable_layer(layer);
-        else {
-            // Need to construct the message in a silly way so we can concat the layer on the end
-            std::string message = "Failed to find validation layer: ";
-            message += layer;
-            Logger::warn(message);
+        auto systemInfo = vkb::SystemInfo::get_system_info();
+        if (!systemInfo.has_value()) {
+            Logger::error(systemInfo.error().message());
+            return false;
         }
-    }
-
-    uint32_t extensionCount;
-    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
-    for (int i = 0; i < extensionCount; ++i) {
-        if (systemInfo->is_extension_available(glfwExtensions[i])) instanceBuilder.enable_layer(glfwExtensions[i]);
-        else {
-            // Need to construct the message in a silly way so we can concat the layer on the end
-            std::string message = "Failed to find validation layer: ";
-            message += glfwExtensions[i];
-            Logger::warn(message);
+        for (const auto& layer: this->validationLayers) {
+            if (systemInfo->is_layer_available(layer)) instanceBuilder.enable_layer(layer);
+            else {
+                // Need to construct the message in a silly way so we can concat the layer on the end
+                std::string message = "Failed to find validation layer: ";
+                message += layer;
+                Logger::warn(message);
+            }
         }
+
+        uint32_t extensionCount;
+        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
+        for (int i = 0; i < extensionCount; ++i) {
+            if (systemInfo->is_extension_available(glfwExtensions[i])) instanceBuilder.enable_extension(glfwExtensions[i]);
+            else {
+                // Need to construct the message in a silly way so we can concat the layer on the end
+                std::string message = "Failed to find validation layer: ";
+                message += glfwExtensions[i];
+                Logger::warn(message);
+            }
+        }
+
+        auto vkbInst = instanceBuilder
+                .build();
+
+        if (!vkbInst.has_value()) {
+            Logger::error("Failed to create instance");
+            Logger::error(vkbInst.error().message());
+            return false;
+        }
+
+        vkbInstance = vkbInst.value();
+
+        this->vInstance = vkbInstance.instance;
+        this->debugMessenger = vkbInstance.debug_messenger;
     }
-
-    auto vkbInst = instanceBuilder.build();
-
-    if (!vkbInst.has_value()) return false;
-
-    vkb::Instance vkbInstance = vkbInst.value();
-
-    this->vInstance = vkbInstance.instance;
-    this->debugMessenger = vkbInstance.debug_messenger;
 
     // Surface
-    VkResult result = glfwCreateWindowSurface(this->vInstance, this->window, nullptr, &surface);
+    {
+        VkResult result = glfwCreateWindowSurface(this->vInstance, this->window, nullptr, &surface);
 
-    if (result != VK_SUCCESS) {
-        Logger::error("Failed to create Surface");
+        if (result != VK_SUCCESS) {
+            Logger::error("Failed to create Surface");
+            return false;
+        }
+    }
+
+    // Setup Device
+    vkb::Device vkbDevice;
+    {
+        auto deviceSelector = vkb::PhysicalDeviceSelector(vkbInstance)
+                .set_minimum_version(1, 1)
+                .set_surface(surface)
+                .add_required_extensions(this->deviceExtensions)
+                .select();
+
+        if (!deviceSelector.has_value()) {
+            Logger::error("Failed to select device");
+            return false;
+        }
+
+        vkb::PhysicalDevice vkbPDevice = deviceSelector.value();
+
+        auto vkbDev = vkb::DeviceBuilder(vkbPDevice)
+                .build();
+
+        if (!deviceSelector.has_value()) {
+            Logger::error("Failed to create logical device");
+            return false;
+        }
+
+        vkbDevice = vkbDev.value();
+
+        this->device = vkbDevice.device;
+        this->gpu = vkbDevice.physical_device;
+
+        this->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+    }
+
+    // Command buffers
+    {
+        VkCommandPoolCreateInfo commandPoolCreateInfo = {};
+        commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        commandPoolCreateInfo.pNext = nullptr;
+
+        commandPoolCreateInfo.queueFamilyIndex = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+        commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+        if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &this->graphicsCommandPool) != VK_SUCCESS) {
+            Logger::error("Failed to create command pool");
+            return false;
+        }
+        VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+        commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        commandBufferAllocateInfo.pNext = nullptr;
+
+        commandBufferAllocateInfo.commandPool = this->graphicsCommandPool;
+        commandBufferAllocateInfo.commandBufferCount = 1;
+        commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+        if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &this->commandBuffer) != VK_SUCCESS) {
+            Logger::error("Failed to create command buffer");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
+    vkb::SwapchainBuilder swapchainBuilder(this->gpu, this->device, this->surface);
+
+    auto vkbSc = swapchainBuilder
+            .use_default_format_selection()
+            .set_desired_extent(settings.windowWidth, settings.windowHeight)
+            .set_required_min_image_count(settings.bufferCount)
+            .set_desired_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR)
+            .add_fallback_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_FIFO_RELAXED_KHR)
+            .build();
+
+    if (!vkbSc.has_value()) {
+        Logger::error("Failed to create swap chain");
         return false;
     }
 
-    // Pick Device
-    auto deviceSelector = vkb::PhysicalDeviceSelector(vkbInstance)
-        .set_minimum_version(1, 1)
-        .set_surface(surface)
-        .add_required_extensions(this->deviceExtensions)
-        .select();
+    vkb::Swapchain vkbSwapchain = vkbSc.value();
 
-    if (!deviceSelector.has_value()) return false;
+    this->swapchain = vkbSwapchain.swapchain;
+    this->swapchainImages = vkbSwapchain.get_images().value();
+    this->swapchainImageViews = vkbSwapchain.get_image_views().value();
 
-    vkb::PhysicalDevice vkbPDevice = deviceSelector.value();
+    this->swapchainImageFormat = vkbSwapchain.image_format;
 
-    auto vkbDev = vkb::DeviceBuilder(vkbPDevice)
-            .build();
-
-    vkb::Device vkbDevice = vkbDev.value();
-
-    this->device = vkbDevice.device;
-    this->gpu = vkbDevice.physical_device;
     return true;
+}
+
+bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
+    VkAttachmentDescription colourAttachment = {};
+    colourAttachment.format = swapchainImageFormat;
+    colourAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+
+    colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+    colourAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colourAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+    colourAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colourAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colourAttachmentReference = {};
+
+    colourAttachmentReference.attachment = 0;
+    colourAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colourAttachmentReference;
+
+    VkRenderPassCreateInfo renderPassCreateInfo = {};
+    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+
+    renderPassCreateInfo.attachmentCount = 1;
+    renderPassCreateInfo.pAttachments = &colourAttachment;
+    renderPassCreateInfo.subpassCount = 1;
+    renderPassCreateInfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(this->device, &renderPassCreateInfo, nullptr, &renderPass) != VK_SUCCESS) {
+        Logger::error("Failed to create renderpass");
+        return false;
+    }
+
+    return true;
+}
+
+bool VulkanRenderer::initFramebuffers(EngineSettings& settings) {
+    VkFramebufferCreateInfo framebufferCreateInfo = {};
+    framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferCreateInfo.pNext = nullptr;
+
+    framebufferCreateInfo.renderPass = this->renderPass;
+    framebufferCreateInfo.attachmentCount = 1;
+    framebufferCreateInfo.width = settings.windowWidth;
+    framebufferCreateInfo.height = settings.windowHeight;
+    framebufferCreateInfo.layers = 1;
+
+    const uint32_t swapchainLength = this->swapchainImages.size();
+    this->framebuffers = std::vector<VkFramebuffer>(swapchainLength);
+
+    for (int i = 0; i < swapchainLength; ++i) {
+        framebufferCreateInfo.pAttachments = &this->swapchainImageViews[i];
+        if (vkCreateFramebuffer(this->device, &framebufferCreateInfo, nullptr, &this->framebuffers[i]) != VK_SUCCESS) {
+            Logger::error("Failed to create framebuffer");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool VulkanRenderer::initSyncObjects(EngineSettings& settings) {
+    // Fence
+    {
+        VkFenceCreateInfo fenceCreateInfo = {};
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceCreateInfo.pNext = nullptr;
+        fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &renderFence) != VK_SUCCESS) {
+            Logger::error("Failed to create fence");
+            return false;
+        }
+    }
+    // Semaphores
+    {
+        VkSemaphoreCreateInfo semaphoreCreateInfo = {};
+        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        semaphoreCreateInfo.pNext = nullptr;
+        semaphoreCreateInfo.flags = 0;
+
+        if (vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &renderSemaphore) != VK_SUCCESS
+            || vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &presentSemaphore) != VK_SUCCESS) {
+            Logger::error("Failed to create semaphore");
+            return false;
+        }
+    }
+    return true;
+}
+
+void VulkanRenderer::cleanupSwapchain() {
+    vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
+
+    for (int i = 0; i < this->swapchainImageViews.size(); ++i) {
+        vkDestroyFramebuffer(this->device, this->framebuffers[i], nullptr);
+
+        vkDestroyImageView(this->device, this->swapchainImageViews[i], nullptr);
+    }
+}
+
+void VulkanRenderer::cleanup() {
+    cleanupSwapchain();
+
+    vkDestroyFence(this->device, this->renderFence, nullptr);
+    vkDestroySemaphore(this->device, this->renderSemaphore, nullptr);
+    vkDestroySemaphore(this->device, this->presentSemaphore, nullptr);
+
+    vkDestroyRenderPass(this->device, this->renderPass, nullptr);
+
+    vkDestroyCommandPool(this->device, this->graphicsCommandPool, nullptr);
+
+    vkDestroyDevice(this->device, nullptr);
+    vkDestroySurfaceKHR(this->vInstance, this->surface, nullptr);
+
+    vkb::destroy_debug_utils_messenger(this->vInstance, this->debugMessenger);
+    vkDestroyInstance(this->vInstance, nullptr);
+
+    Renderer::cleanup();
+}
+
+
+
+void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
+    vkWaitForFences(this->device, 1, &renderFence, true, UINT64_MAX);
+    vkResetFences(this->device, 1, &renderFence);
+
+    uint32_t swapchainIndex;
+    vkAcquireNextImageKHR(this->device, this->swapchain, UINT64_MAX, this->presentSemaphore, VK_NULL_HANDLE, &swapchainIndex);
+
+    vkResetCommandBuffer(commandBuffer, 0);
+
+    VkCommandBufferBeginInfo commandBufferBeginInfo = {};
+    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    commandBufferBeginInfo.pNext = nullptr;
+    commandBufferBeginInfo.pInheritanceInfo = nullptr;
+
+    commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(this->commandBuffer, &commandBufferBeginInfo);
+
+    VkClearValue clearValue;
+    float flash = (float) std::abs(std::sin(gameTime));
+    clearValue.color = {{0.f, 0.f, flash, 1.f}};
+
+    VkRenderPassBeginInfo renderPassBeginInfo = {};
+    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBeginInfo.pNext = nullptr;
+
+    renderPassBeginInfo.renderPass = this->renderPass;
+    renderPassBeginInfo.renderArea.offset.x = 0;
+    renderPassBeginInfo.renderArea.offset.y = 0;
+    renderPassBeginInfo.renderArea.extent = {1366, 768};
+    renderPassBeginInfo.framebuffer = this->framebuffers[swapchainIndex];
+
+    renderPassBeginInfo.clearValueCount = 1;
+    renderPassBeginInfo.pClearValues = &clearValue;
+
+    vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdEndRenderPass(this->commandBuffer);
+    vkEndCommandBuffer(this->commandBuffer);
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = nullptr;
+
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+    submitInfo.pWaitDstStageMask = &waitStage;
+
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &this->presentSemaphore;
+
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &this->renderSemaphore;
+
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &this->commandBuffer;
+
+    vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, this->renderFence);
+
+    VkPresentInfoKHR presentInfo = {};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.pNext = nullptr;
+
+    presentInfo.pSwapchains = &this->swapchain;
+    presentInfo.swapchainCount = 1;
+
+    presentInfo.pWaitSemaphores = &this->renderSemaphore;
+    presentInfo.waitSemaphoreCount = 1;
+
+    presentInfo.pImageIndices = &swapchainIndex;
+
+    vkQueuePresentKHR(this->graphicsQueue, &presentInfo);
 }

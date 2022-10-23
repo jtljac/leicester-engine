@@ -26,7 +26,7 @@ int LeicesterEngine::initialise() {
         this->frameDelta = currentFrameTime - lastFrameTime;
         lastFrameTime = currentFrameTime;
         // Render Frame
-
+        renderer->drawFrame(this->frameDelta, currentFrameTime);
         // Handle Events
         glfwPollEvents();
     }

@@ -23,16 +23,7 @@ std::string Logger::getLogLevelString(LogLevel level) {
 }
 
 void Logger::log(LogLevel level, const std::string& message) {
-    printf("%s: %s", getLogLevelString(level).c_str(), message.c_str());
-}
-
-void Logger::format(LogLevel level, std::string message, ...) { // NOLINT(performance-unnecessary-value-param)
-    std::string levelString = getLogLevelString(level);
-
-    va_list args;
-    va_start(args, message);
-    vprintf((levelString + ": " + message).c_str(), args);
-    va_end(args);
+    printf("%s: %s\n", getLogLevelString(level).c_str(), message.c_str());
 }
 
 void Logger::critical(const std::string& message) {

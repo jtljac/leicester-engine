@@ -16,19 +16,19 @@ void Renderer::setupGLFWHints() {
 
 }
 
-int Renderer::initialiseGlfw(EngineSettings& settings) {
+bool Renderer::initialiseGlfw(EngineSettings& settings) {
     glfwInit();
     setupGLFWHints();
 
-    this->window = glfwCreateWindow(settings.windowWidth, settings.windowWidth, settings.windowTitle.c_str(), NULL, NULL);
+    this->window = glfwCreateWindow(settings.windowWidth, settings.windowHeight, settings.windowTitle.c_str(), NULL, NULL);
     if (window == nullptr) {
-        return -1;
+        return false;
     }
 
     glfwSetWindowUserPointer(this->window, this);
 
     setupGlfwCallbacks();
-    return 0;
+    return true;
 }
 
 bool Renderer::initialise(EngineSettings& settings) {

@@ -29,14 +29,6 @@ public:
     static void log(LogLevel level, const std::string& message);
 
     /**
-     * Print a message to the console with printf style formatting
-     * @param level The severity of the message
-     * @param message The format string being printed to the console
-     * @param ... The parameters for the format string
-     */
-    static void format(LogLevel level, std::string message, ...);
-
-    /**
      * Log a critical message to the console
      * @param message The message being logged
      */
