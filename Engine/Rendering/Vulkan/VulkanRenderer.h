@@ -59,6 +59,7 @@ class VulkanRenderer : public Renderer {
 
     /**
      * Setup the render pass
+     * Populates renderpass
      * @param settings the engine settings
      * @return
      */
@@ -66,6 +67,7 @@ class VulkanRenderer : public Renderer {
 
     /**
      * Setup the framebuffers used for rendering to
+     * Populates framebuffers
      * @param settings the engine settings
      * @return True if successful
      */
@@ -73,10 +75,26 @@ class VulkanRenderer : public Renderer {
 
     /**
      * Initialise the semaphores and fences used to sync the rendering operations
+     * Populates presentSemaphore, renderSemaphore, and renderFence
      * @param settings the engine settings
      * @return True if successful
      */
     bool initSyncObjects(EngineSettings& settings);
+
+    /**
+     * Initialise the shader pipeline
+     * @param settings the engine settings
+     * @return True if successful
+     */
+    bool initPipelines(EngineSettings& settings);
+
+    /**
+     * Load the shader at the given path
+     * @param path The path to the shader on the disk
+     * @param outShaderModule A pointer to store the created shader module in
+     * @return True if successful
+     */
+    bool loadShader(const std::string& path, VkShaderModule* outShaderModule);
 
     /**
      * Cleanup the swapchain

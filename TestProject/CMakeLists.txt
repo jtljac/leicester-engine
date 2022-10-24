@@ -4,3 +4,4 @@ add_executable(leicester-game main.cpp)
 
 target_link_libraries(leicester-game leicester-engine)
 
+set(assetDest "${CMAKE_CURRENT_BINARY_DIR}/Assets"  CACHE INTERNAL "")

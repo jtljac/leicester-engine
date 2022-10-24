@@ -16,5 +16,7 @@ add_subdirectory(Third-Party)
 
 add_subdirectory(Engine)
 
+set(assetDest "${CMAKE_BINARY_DIR}/Engine" CACHE FILEPATH "Path to the asset directory")
+
 # Testing
 add_subdirectory(TestProject)

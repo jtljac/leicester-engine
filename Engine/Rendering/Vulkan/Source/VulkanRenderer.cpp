@@ -3,9 +3,11 @@
 //
 
 #include <cmath>
+#include <fstream>
 
 #include "../VulkanRenderer.h"
 #include <Utils/Logger.h>
+#include <Utils/FileUtils.h>
 
 #include <VkBootstrap.h>
 
@@ -17,6 +19,7 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     if (!this->initRenderpass(settings)) return false;
     if (!this->initFramebuffers(settings)) return false;
     if (!this->initSyncObjects(settings)) return false;
+    if (!this->initPipelines(settings)) return false;
 
     return true;
 }
@@ -279,6 +282,24 @@ bool VulkanRenderer::initSyncObjects(EngineSettings& settings) {
     return true;
 }
 
+
+
+bool VulkanRenderer::initPipelines(EngineSettings& settings) {
+    VkShaderModule triangleFrag;
+    if (!this->loadShader(FileUtils::getAssetsPath() + "/triangle.frag.spv", &triangleFrag)) {
+        Logger::error("Failed to open triangle frag shader");
+        return false;
+    }
+
+    VkShaderModule triangleVert;
+    if (!this->loadShader(FileUtils::getAssetsPath() + "/triangle.vert.spv", &triangleVert)) {
+        Logger::error("Failed to open triangle vert shader");
+        return false;
+    }
+
+    return true;
+}
+
 void VulkanRenderer::cleanupSwapchain() {
     vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
 
@@ -308,8 +329,6 @@ void VulkanRenderer::cleanup() {
 
     Renderer::cleanup();
 }
-
-
 
 void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     vkWaitForFences(this->device, 1, &renderFence, true, UINT64_MAX);
@@ -381,4 +400,34 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     presentInfo.pImageIndices = &swapchainIndex;
 
     vkQueuePresentKHR(this->graphicsQueue, &presentInfo);
+}
+
+bool VulkanRenderer::loadShader(const std::string& path, VkShaderModule* outShaderModule) {
+    std::ifstream shaderFile(path, std::ios::ate | std::ios::binary);
+
+    if (!shaderFile.is_open()) {
+        Logger::error("Failed to open file: " + path);
+        return false;
+    }
+
+    size_t fileSize = shaderFile.tellg();
+
+    std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
+
+    shaderFile.seekg(0);
+    shaderFile.read((char*) buffer.data(), fileSize);
+
+    VkShaderModuleCreateInfo shaderModuleCreateInfo ={};
+    shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderModuleCreateInfo.pNext = nullptr;
+
+    shaderModuleCreateInfo.codeSize = fileSize;
+    shaderModuleCreateInfo.pCode = buffer.data();
+
+    if (vkCreateShaderModule(this->device, &shaderModuleCreateInfo, nullptr, outShaderModule)) {
+        Logger::warn("Failed to create shader module");
+        return false;
+    }
+
+    return true;
 }
