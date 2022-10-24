@@ -14,7 +14,7 @@ std::string FileUtils::getGamePath() {
 
     return dest.substr(0, dest.find_last_of("\\/"));
 #else
-    return "./";
+    return ".";
 #endif
 }
 

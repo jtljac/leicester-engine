@@ -1,6 +1,10 @@
-//
-// Created by jacob on 21/10/22.
-//
+/**
+ * This code (and it's source) was created by following these guides:
+ * https://vkguide.dev/             MIT Licence: https://github.com/vblanco20-1/vulkan-guide/blob/master/LICENSE.txt
+ * https://vulkan-tutorial.com/     CCO 1.0 Universal Licence: https://github.com/Overv/VulkanTutorial/blob/master/README.md#license
+ *
+ * The guides have not been followed exactly, and modifications have been made to suit the project
+ */
 
 #pragma once
 
@@ -32,12 +36,15 @@ class VulkanRenderer : public Renderer {
     std::vector<VkImageView> swapchainImageViews;   // The image view wrappers
 
     // Renderpass
-    VkRenderPass renderPass;
-    std::vector<VkFramebuffer> framebuffers;
+    VkRenderPass renderPass;                    // The renderpass handle
+    std::vector<VkFramebuffer> framebuffers;    // A list of framebuffer handles
 
     // Sync objects
     VkSemaphore presentSemaphore, renderSemaphore;
     VkFence renderFence;
+
+    VkPipelineLayout trianglePipelineLayout;
+    VkPipeline trianglePipeline;
 
     /**
      * Sets up the Vulkan instance, the device, and the queues

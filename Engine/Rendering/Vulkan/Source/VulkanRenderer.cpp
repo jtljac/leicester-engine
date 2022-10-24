@@ -1,11 +1,8 @@
-//
-// Created by jacob on 21/10/22.
-//
-
 #include <cmath>
 #include <fstream>
 
 #include "../VulkanRenderer.h"
+#include "../PipelineBuilder.h"
 #include <Utils/Logger.h>
 #include <Utils/FileUtils.h>
 
@@ -167,13 +164,14 @@ bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
     auto vkbSc = swapchainBuilder
             .use_default_format_selection()
             .set_desired_extent(settings.windowWidth, settings.windowHeight)
-            .set_required_min_image_count(settings.bufferCount)
+            .set_desired_min_image_count(settings.bufferCount)
             .set_desired_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR)
-            .add_fallback_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_FIFO_RELAXED_KHR)
+            .add_fallback_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_IMMEDIATE_KHR)
             .build();
 
     if (!vkbSc.has_value()) {
         Logger::error("Failed to create swap chain");
+        Logger::error(vkbSc.error().message());
         return false;
     }
 
@@ -297,6 +295,43 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
         return false;
     }
 
+    {
+        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutCreateInfo.pNext = nullptr;
+
+        pipelineLayoutCreateInfo.flags = 0;
+        pipelineLayoutCreateInfo.setLayoutCount = 0;
+        pipelineLayoutCreateInfo.pSetLayouts = nullptr;
+        pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+        pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+
+        if (vkCreatePipelineLayout(this->device, &pipelineLayoutCreateInfo, nullptr, &this->trianglePipelineLayout) !=
+            VK_SUCCESS) {
+            Logger::error("Failed to create pipeline layout");
+            return false;
+        }
+    }
+
+    std::optional<VkPipeline> pipeline = PipelineBuilder(this->device, this->renderPass, this->trianglePipelineLayout)
+        .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, triangleVert)
+        .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFrag)
+        .setVertexInputInfoDefault()
+        .setInputAssemblyInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+        .setViewport(0.f, 0.f, (float) settings.windowWidth, (float) settings.windowHeight)
+        .setScissor(0, 0, settings.windowWidth, settings.windowHeight)
+        .setRasterisationState(VK_POLYGON_MODE_FILL)
+        .setMultisampleStateDefault()
+        .setColourBlendAttachmentDefault()
+        .buildPipeline();
+
+    if (!pipeline.has_value()) {
+        Logger::error("Failed to create pipeline");
+        return false;
+    }
+
+    this->trianglePipeline = pipeline.value();
+
     return true;
 }
 
@@ -365,6 +400,10 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     renderPassBeginInfo.pClearValues = &clearValue;
 
     vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->trianglePipeline);
+    vkCmdDraw(this->commandBuffer, 3, 1, 0, 0);
+
     vkCmdEndRenderPass(this->commandBuffer);
     vkEndCommandBuffer(this->commandBuffer);
 

@@ -5,5 +5,5 @@
 #include "Utils/FileUtils.h"
 
 std::string FileUtils::getAssetsPath() {
-    return FileUtils::getGamePath() + "/assets";
+    return FileUtils::getGamePath() + "/Assets";
 }
