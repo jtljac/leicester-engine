@@ -13,10 +13,10 @@ ENDIF()
 add_library(leicester-engine STATIC)
 
 add_subdirectory(Third-Party)
-
+add_subdirectory(AssetProcessor)
 add_subdirectory(Engine)
 
-set(assetDest "${CMAKE_BINARY_DIR}/Engine" CACHE FILEPATH "Path to the asset directory")
+set(assetDest "${CMAKE_BINARY_DIR}/Engine" CACHE FILEPATH "Destination Path of the asset directory in the compiled project")
 
 # Testing
 add_subdirectory(TestProject)

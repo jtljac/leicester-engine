@@ -11,7 +11,8 @@ target_include_directories(leicester-engine PUBLIC ./)
 
 target_sources(leicester-engine PRIVATE "Source/LeicesterEngine.cpp")
 
-add_custom_target(copy_assets
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/Assets ${assetDest}
+add_custom_target(assetProcessor
+        COMMAND asset-processor "${CMAKE_CURRENT_LIST_DIR}/Assets" "${assetDest}"
+        COMMENT "Running Asset Processor"
         )
-add_dependencies(leicester-engine copy_assets)
+add_dependencies(leicester-engine assetProcessor)
