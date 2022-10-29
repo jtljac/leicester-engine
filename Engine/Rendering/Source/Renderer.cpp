@@ -45,3 +45,8 @@ bool Renderer::wantsToClose() {
 }
 
 void Renderer::cleanup() {}
+
+GLFWwindow* Renderer::getWindow() {
+    return this->window;
+}
+

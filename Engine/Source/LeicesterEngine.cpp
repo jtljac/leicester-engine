@@ -2,8 +2,6 @@
 // Created by jacob on 11/10/22.
 //
 #include "../LeicesterEngine.h"
-#include <Utils/EngineSettings.h>
-
 
 int LeicesterEngine::initialise() {
     // Initialise GLFW
@@ -17,7 +15,24 @@ int LeicesterEngine::initialise() {
         return -1;
     }
 
+    return 0;
+}
+
+void LeicesterEngine::setRenderer(Renderer* pRenderer) {
+    this->renderer = pRenderer;
+}
+
+int LeicesterEngine::startLoop() {
     double currentFrameTime;
+
+    glfwSetKeyCallback(renderer->getWindow(), [](GLFWwindow* window, int key, int scancode, int action, int mods){
+        auto* context = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
+        if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+            context->shader = (context->shader + 1) % 2;
+        } else if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+            glfwSetWindowShouldClose(context->getWindow(), GLFW_TRUE);
+        }
+    });
 
     // Main Loop
     while(!renderer->wantsToClose()) {
@@ -32,8 +47,4 @@ int LeicesterEngine::initialise() {
     }
 
     return 0;
-}
-
-void LeicesterEngine::setRenderer(Renderer* pRenderer) {
-    this->renderer = pRenderer;
 }

@@ -27,6 +27,12 @@ PipelineBuilder& PipelineBuilder::addShaderStage(VkPipelineShaderStageCreateInfo
     return *this;
 }
 
+PipelineBuilder& PipelineBuilder::clearShaderStages() {
+    this->shaderStages.clear();
+
+    return *this;
+}
+
 PipelineBuilder& PipelineBuilder::setVertexInputInfoDefault() {
     VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
     vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;

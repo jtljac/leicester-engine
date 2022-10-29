@@ -9,4 +9,5 @@ int main() {
     LeicesterEngine engine;
     engine.setRenderer(new VulkanRenderer());
     engine.initialise();
+    engine.startLoop();
 }

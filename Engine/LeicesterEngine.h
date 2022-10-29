@@ -11,5 +11,7 @@ protected:
 public:
     virtual int initialise();
 
+    virtual int startLoop();
+
     void setRenderer(Renderer* pRenderer);
 };

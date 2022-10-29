@@ -12,6 +12,7 @@
 #include <string>
 
 #include "../Renderer.h"
+#include "DeletionQueue.h"
 
 #include <vulkan/vulkan.h>
 
@@ -45,6 +46,10 @@ class VulkanRenderer : public Renderer {
 
     VkPipelineLayout trianglePipelineLayout;
     VkPipeline trianglePipeline;
+    VkPipeline colourTrianglePipeline;
+
+    // Deletion Queue
+    DeletionQueue deletionQueue;
 
     /**
      * Sets up the Vulkan instance, the device, and the queues

@@ -48,6 +48,12 @@ public:
      */
     PipelineBuilder& addShaderStage(VkPipelineShaderStageCreateInfo& shaderStageCreateInfo);
 
+    /**
+     * Remove all shader stages in the builder
+     * @return the PipelineBuilder
+     */
+    PipelineBuilder& clearShaderStages();
+
 
     /**
      * Sets the vertexInputInfo such that vertexBindingDescriptionCount and vertexAttributeDescriptionCount are both set to 0

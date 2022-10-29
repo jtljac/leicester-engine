@@ -77,7 +77,6 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
 
         if (!vkbInst.has_value()) {
             Logger::error("Failed to create instance");
-            Logger::error(vkbInst.error().message());
             return false;
         }
 
@@ -295,6 +294,18 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
         return false;
     }
 
+    VkShaderModule colourTriangleFrag;
+    if (!this->loadShader(FileUtils::getAssetsPath() + "/colourtriangle.frag.spv", &colourTriangleFrag)) {
+        Logger::error("Failed to open triangle frag shader");
+        return false;
+    }
+
+    VkShaderModule colourTriangleVert;
+    if (!this->loadShader(FileUtils::getAssetsPath() + "/colourtriangle.vert.spv", &colourTriangleVert)) {
+        Logger::error("Failed to open triangle vert shader");
+        return false;
+    }
+
     {
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -313,7 +324,7 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
         }
     }
 
-    std::optional<VkPipeline> pipeline = PipelineBuilder(this->device, this->renderPass, this->trianglePipelineLayout)
+    PipelineBuilder pipelineBuilder = PipelineBuilder(this->device, this->renderPass, this->trianglePipelineLayout)
         .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, triangleVert)
         .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFrag)
         .setVertexInputInfoDefault()
@@ -322,8 +333,9 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
         .setScissor(0, 0, settings.windowWidth, settings.windowHeight)
         .setRasterisationState(VK_POLYGON_MODE_FILL)
         .setMultisampleStateDefault()
-        .setColourBlendAttachmentDefault()
-        .buildPipeline();
+        .setColourBlendAttachmentDefault();
+
+    std::optional<VkPipeline> pipeline = pipelineBuilder.buildPipeline();
 
     if (!pipeline.has_value()) {
         Logger::error("Failed to create pipeline");
@@ -332,10 +344,34 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
 
     this->trianglePipeline = pipeline.value();
 
+    std::optional<VkPipeline> colourPipeline = pipelineBuilder
+        .clearShaderStages()
+        .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, colourTriangleVert)
+        .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, colourTriangleFrag)
+        .buildPipeline();
+
+    if (!colourPipeline.has_value()) {
+        Logger::error("Failed to create pipeline");
+        return false;
+    }
+
+    this->colourTrianglePipeline = colourPipeline.value();
+
+    vkDestroyShaderModule(this->device, triangleFrag, nullptr);
+    vkDestroyShaderModule(this->device, triangleVert, nullptr);
+    vkDestroyShaderModule(this->device, colourTriangleFrag, nullptr);
+    vkDestroyShaderModule(this->device, colourTriangleVert, nullptr);
+
+    this->deletionQueue.pushDeletor([trianglePipeline = this->trianglePipeline, colourTrianglePipeline = this->colourTrianglePipeline](VkDevice& device) {
+        vkDestroyPipeline(device, trianglePipeline, nullptr);
+        vkDestroyPipeline(device, colourTrianglePipeline, nullptr);
+    });
+
     return true;
 }
 
 void VulkanRenderer::cleanupSwapchain() {
+    vkDeviceWaitIdle(this->device);
     vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
 
     for (int i = 0; i < this->swapchainImageViews.size(); ++i) {
@@ -346,7 +382,11 @@ void VulkanRenderer::cleanupSwapchain() {
 }
 
 void VulkanRenderer::cleanup() {
+    vkDeviceWaitIdle(this->device);
+
     cleanupSwapchain();
+
+    deletionQueue.flush(this->device);
 
     vkDestroyFence(this->device, this->renderFence, nullptr);
     vkDestroySemaphore(this->device, this->renderSemaphore, nullptr);
@@ -401,7 +441,11 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
 
     vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->trianglePipeline);
+    if (this->shader == 0) {
+        vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->trianglePipeline);
+    } else {
+        vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->colourTrianglePipeline);
+    }
     vkCmdDraw(this->commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(this->commandBuffer);

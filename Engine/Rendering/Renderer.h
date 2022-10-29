@@ -31,6 +31,7 @@ protected:
      */
     virtual void setupGLFWHints();
 public:
+    int shader = 0;
     Renderer() = default;
     virtual ~Renderer() = 0;
 
@@ -60,4 +61,6 @@ public:
      * Get if the windows wants to close
      */
     bool wantsToClose();
+
+    GLFWwindow* getWindow();
 };
