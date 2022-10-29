@@ -11,10 +11,12 @@
 #include <vector>
 #include <string>
 
+#include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
+
 #include "../Renderer.h"
 #include "DeletionQueue.h"
-
-#include <vulkan/vulkan.h>
+#include "AllocatedBuffer.h"
 
 class VulkanRenderer : public Renderer {
     // Vulkan Handles
@@ -23,6 +25,9 @@ class VulkanRenderer : public Renderer {
     VkPhysicalDevice gpu;                       // Physical GPU Device Handle
     VkDevice device;                            // Device Handle for commands
     VkSurfaceKHR surface;                       // Window surface handle
+
+    // Memory Management
+    VmaAllocator allocator;                     // The GPU memory allocator
 
     // Queues
     VkQueue graphicsQueue;              // The queue used for graphics commands
@@ -49,7 +54,7 @@ class VulkanRenderer : public Renderer {
     VkPipeline colourTrianglePipeline;
 
     // Deletion Queue
-    DeletionQueue deletionQueue;
+    DeletionQueue deletionQueue;        // A queue storing deletion functions
 
     /**
      * Sets up the Vulkan instance, the device, and the queues

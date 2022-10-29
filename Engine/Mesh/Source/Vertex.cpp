@@ -4,4 +4,4 @@
 
 #include "Mesh/Vertex.h"
 
-Vertex::Vertex(glm::vec3 position, glm::vec3 normal, glm::vec3 tangent) : position(position), normal(normal), tangent(tangent) {}
+Vertex::Vertex(glm::vec3 position, glm::vec3 normal, glm::vec3 colour) : position(position), normal(normal), colour(colour) {}

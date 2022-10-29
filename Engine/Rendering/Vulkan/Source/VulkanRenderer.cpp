@@ -7,6 +7,8 @@
 #include <Utils/FileUtils.h>
 
 #include <VkBootstrap.h>
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
 
 bool VulkanRenderer::initialise(EngineSettings& settings) {
     Renderer::initialise(settings);
@@ -126,6 +128,19 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
         this->gpu = vkbDevice.physical_device;
 
         this->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+    }
+
+    // VMA Allocator
+    {
+        VmaAllocatorCreateInfo allocatorCreateInfo = {};
+        allocatorCreateInfo.physicalDevice = this->gpu;
+        allocatorCreateInfo.device = this->device;
+        allocatorCreateInfo.instance = this->vInstance;
+
+        if (vmaCreateAllocator(&allocatorCreateInfo, &this->allocator) != VK_SUCCESS){
+            Logger::error("Failed to create memory allocator");
+            return false;
+        }
     }
 
     // Command buffers
@@ -395,6 +410,8 @@ void VulkanRenderer::cleanup() {
     vkDestroyRenderPass(this->device, this->renderPass, nullptr);
 
     vkDestroyCommandPool(this->device, this->graphicsCommandPool, nullptr);
+
+    vmaDestroyAllocator(this->allocator);
 
     vkDestroyDevice(this->device, nullptr);
     vkDestroySurfaceKHR(this->vInstance, this->surface, nullptr);

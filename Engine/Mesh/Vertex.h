@@ -6,8 +6,8 @@
 #include <glm/vec3.hpp>
 
 struct Vertex {
-    glm::vec3 position, normal, tangent;
+    glm::vec3 position, normal, colour;
 
     Vertex() = default;
-    Vertex(glm::vec3 position, glm::vec3 normal, glm::vec3 tangent);
+    Vertex(glm::vec3 position, glm::vec3 normal, glm::vec3 colour);
 };
