@@ -10,6 +10,7 @@
 #include <optional>
 
 #include <vulkan/vulkan.h>
+#include "VertexDescription.h"
 
 
 /**
@@ -60,6 +61,20 @@ public:
      * @return the PipelineBuilder
      */
     PipelineBuilder& setVertexInputInfoDefault();
+
+    /**
+     * Sets the vertexInputInfo using info from a VertexDescription
+     * @param vertexDescription the vertexDescription to pull the vertex input info from
+     * @return the PipelineBuilder
+     */
+    PipelineBuilder& setVertexInputInfo(VertexDescription vertexDescription);
+
+    /**
+     * Sets vertexInputInfo
+     * @param vertexInputStateCreateInfo An already made VkPipelineVertexInputStateCreateInfo
+     * @return the PipelineBuilder
+     */
+    PipelineBuilder& setVertexInputInfo(VkPipelineVertexInputStateCreateInfo& vertexInputStateCreateInfo);
 
 
     /**

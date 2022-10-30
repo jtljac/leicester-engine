@@ -11,4 +11,6 @@
 struct Mesh {
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
+    size_t verticesIndex;
+    size_t indicesIndex;
 };

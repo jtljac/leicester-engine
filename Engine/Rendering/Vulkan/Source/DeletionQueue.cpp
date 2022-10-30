@@ -9,8 +9,8 @@ void DeletionQueue::pushDeletor(std::function<void(VkDevice&)>&& deletor) {
 }
 
 void DeletionQueue::flush(VkDevice& device) {
-    while (!this->deletors.empty()) {
-        deletors.front()(device);
-        deletors.pop_front();
+    for (auto& item: this->deletors) {
+        item(device);
     }
+    this->deletors.clear();
 }

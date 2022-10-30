@@ -15,6 +15,7 @@
 #include <vk_mem_alloc.h>
 
 #include "../Renderer.h"
+#include <Mesh/Mesh.h>
 #include "DeletionQueue.h"
 #include "AllocatedBuffer.h"
 
@@ -52,9 +53,30 @@ class VulkanRenderer : public Renderer {
     VkPipelineLayout trianglePipelineLayout;
     VkPipeline trianglePipeline;
     VkPipeline colourTrianglePipeline;
+    VkPipeline meshTrianglePipeline;
 
-    // Deletion Queue
     DeletionQueue deletionQueue;        // A queue storing deletion functions
+    std::vector<AllocatedBuffer> memoryList;
+
+    Mesh triangleMesh;
+
+protected:
+    /**
+     * Required validation layers when running in debug mode
+     */
+    std::vector<const char*> validationLayers = {
+            "VK_LAYER_KHRONOS_validation",  // General vulkan debug
+            "VK_LAYER_LUNARG_monitor"       // Adds an FPS counter to the title bar
+    };
+
+    /**
+     * Required device extensions
+     */
+    std::vector<const char*> deviceExtensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME // The extension that enables the use of a swap chain for presenting
+    };
+
+private:
 
     /**
      * Sets up the Vulkan instance, the device, and the queues
@@ -113,27 +135,14 @@ class VulkanRenderer : public Renderer {
      */
     bool loadShader(const std::string& path, VkShaderModule* outShaderModule);
 
+    bool uploadMesh(Mesh& mesh);
+
     /**
      * Cleanup the swapchain
      * This is separated out so the swapchain can be recreated without destroying the whole vulkan context
      */
     void cleanupSwapchain();
 protected:
-    /**
-     * Required validation layers when running in debug mode
-     */
-    std::vector<const char*> validationLayers = {
-            "VK_LAYER_KHRONOS_validation",  // General vulkan debug
-            "VK_LAYER_LUNARG_monitor"       // Adds an FPS counter to the title bar
-    };
-
-    /**
-     * Required device extensions
-     */
-    std::vector<const char*> deviceExtensions = {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME // The extension that enables the use of a swap chain for presenting
-    };
-
     void setupGLFWHints() override;
 public:
     VulkanRenderer() = default;

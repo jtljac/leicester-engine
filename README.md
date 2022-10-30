@@ -11,6 +11,6 @@ boilerplate involved in setting up vulkan
  - [Vulkan Memory Manager](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator) - A library to help with 
 all the boilerplate involved in managing GPU memory
 
-With the exception of VK-Bookstrap, these libraries are loaded using CMake's `find_package` directive, thus must be
+With the exception of VK-Bookstrap and Vulkan Memory Manager, these libraries are loaded using CMake's `find_package` directive, thus must be
 installed on the system building the project.
-VK-Boostrap is loaded as a git submodule.
+VK-Boostrap and Vulkan Memory Manager are loaded as git submodules.

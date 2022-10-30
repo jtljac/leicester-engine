@@ -20,6 +20,19 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     if (!this->initSyncObjects(settings)) return false;
     if (!this->initPipelines(settings)) return false;
 
+    triangleMesh.vertices.resize(3);
+    triangleMesh.vertices[0].position = {0.5f, 0.5f, 0.f};
+    triangleMesh.vertices[1].position = {-0.5f, 0.5f, 0.f};
+    triangleMesh.vertices[2].position = {0.f, -0.5f, 0.f};
+
+    triangleMesh.vertices[0].colour = {1.f, 0.f, 0.f};
+    triangleMesh.vertices[1].colour = {0.f, 1.f, 0.f};
+    triangleMesh.vertices[2].colour = {0.f, 0.f, 1.f};
+
+    triangleMesh.indices = {0, 1, 2};
+
+    uploadMesh(triangleMesh);
+
     return true;
 }
 
@@ -321,6 +334,12 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
         return false;
     }
 
+    VkShaderModule meshTriangleVert;
+    if (!this->loadShader(FileUtils::getAssetsPath() + "/meshtriangle.vert.spv", &meshTriangleVert)) {
+        Logger::error("Failed to open triangle vert shader");
+        return false;
+    }
+
     {
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -372,14 +391,32 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
 
     this->colourTrianglePipeline = colourPipeline.value();
 
+    std::optional<VkPipeline> meshPipeline = pipelineBuilder
+            .clearShaderStages()
+            .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, meshTriangleVert)
+            .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, colourTriangleFrag)
+            .setVertexInputInfo(VertexDescription::getVertexDescription())
+            .buildPipeline();
+
+    if (!meshPipeline.has_value()) {
+        Logger::error("Failed to create pipeline");
+        return false;
+    }
+
+    this->meshTrianglePipeline = meshPipeline.value();
+
     vkDestroyShaderModule(this->device, triangleFrag, nullptr);
     vkDestroyShaderModule(this->device, triangleVert, nullptr);
     vkDestroyShaderModule(this->device, colourTriangleFrag, nullptr);
     vkDestroyShaderModule(this->device, colourTriangleVert, nullptr);
+    vkDestroyShaderModule(this->device, meshTriangleVert, nullptr);
 
-    this->deletionQueue.pushDeletor([trianglePipeline = this->trianglePipeline, colourTrianglePipeline = this->colourTrianglePipeline](VkDevice& device) {
+    this->deletionQueue.pushDeletor([trianglePipelineLayout = this->trianglePipelineLayout, trianglePipeline = this->trianglePipeline, colourTrianglePipeline = this->colourTrianglePipeline, meshTrianglePipeline = this->meshTrianglePipeline](VkDevice& device) {
         vkDestroyPipeline(device, trianglePipeline, nullptr);
         vkDestroyPipeline(device, colourTrianglePipeline, nullptr);
+        vkDestroyPipeline(device, meshTrianglePipeline, nullptr);
+
+        vkDestroyPipelineLayout(device, trianglePipelineLayout, nullptr);
     });
 
     return true;
@@ -400,6 +437,11 @@ void VulkanRenderer::cleanup() {
     vkDeviceWaitIdle(this->device);
 
     cleanupSwapchain();
+
+    for (auto& allocatedBuffer: memoryList) {
+        vmaDestroyBuffer(this->allocator, allocatedBuffer.buffer, allocatedBuffer.allocation);
+    }
+    memoryList.clear();
 
     deletionQueue.flush(this->device);
 
@@ -456,16 +498,22 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     renderPassBeginInfo.clearValueCount = 1;
     renderPassBeginInfo.pClearValues = &clearValue;
 
-    vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    // Renderpass
+    {
+        vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    if (this->shader == 0) {
-        vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->trianglePipeline);
-    } else {
-        vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->colourTrianglePipeline);
+        vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->meshTrianglePipeline);
+
+        AllocatedBuffer vertBuffer = this->memoryList[this->triangleMesh.verticesIndex];
+        AllocatedBuffer indBuffer = this->memoryList[this->triangleMesh.indicesIndex];
+        VkDeviceSize offset = 0;
+        vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+        vkCmdBindIndexBuffer(this->commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+
+        vkCmdDrawIndexed(this->commandBuffer, this->triangleMesh.indices.size(), 1, 0, 0, 0);
+
+        vkCmdEndRenderPass(this->commandBuffer);
     }
-    vkCmdDraw(this->commandBuffer, 3, 1, 0, 0);
-
-    vkCmdEndRenderPass(this->commandBuffer);
     vkEndCommandBuffer(this->commandBuffer);
 
     VkSubmitInfo submitInfo = {};
@@ -528,6 +576,49 @@ bool VulkanRenderer::loadShader(const std::string& path, VkShaderModule* outShad
         Logger::warn("Failed to create shader module");
         return false;
     }
+
+    return true;
+}
+
+bool VulkanRenderer::uploadMesh(Mesh& mesh) {
+    VkBufferCreateInfo bufferCreateInfo = {};
+    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCreateInfo.size = mesh.vertices.size() * sizeof(Vertex);
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+    VmaAllocationCreateInfo allocationCreateInfo = {};
+    allocationCreateInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+
+    AllocatedBuffer allocatedBuffer;
+
+    if (vmaCreateBuffer(this->allocator, &bufferCreateInfo, &allocationCreateInfo, &allocatedBuffer.buffer, &allocatedBuffer.allocation, nullptr) != VK_SUCCESS) {
+        Logger::warn("Failed to create upload mesh vertices to GPU");
+        return false;
+    }
+
+    mesh.verticesIndex = memoryList.size();
+    this->memoryList.push_back(allocatedBuffer);
+
+    void* data;
+    vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
+    memcpy(data, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
+    vmaUnmapMemory(this->allocator, allocatedBuffer.allocation);
+
+    bufferCreateInfo.size = mesh.indices.size() * sizeof(uint32_t);
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+
+    allocatedBuffer = AllocatedBuffer();
+
+    if (vmaCreateBuffer(this->allocator, &bufferCreateInfo, &allocationCreateInfo, &allocatedBuffer.buffer, &allocatedBuffer.allocation, nullptr) != VK_SUCCESS) {
+        Logger::warn("Failed to create upload mesh indices to GPU");
+        return false;
+    }
+
+    mesh.indicesIndex = memoryList.size();
+    this->memoryList.push_back(allocatedBuffer);
+    vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
+    memcpy(data, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
+    vmaUnmapMemory(this->allocator, allocatedBuffer.allocation);
 
     return true;
 }

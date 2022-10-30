@@ -46,6 +46,28 @@ PipelineBuilder& PipelineBuilder::setVertexInputInfoDefault() {
     return *this;
 }
 
+PipelineBuilder& PipelineBuilder::setVertexInputInfo(VertexDescription vertexDescription) {
+    VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
+    vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputStateCreateInfo.pNext = nullptr;
+
+    vertexInputStateCreateInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
+    vertexInputStateCreateInfo.vertexAttributeDescriptionCount = vertexDescription.attributes.size();
+
+    vertexInputStateCreateInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
+    vertexInputStateCreateInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
+
+    vertexInputStateCreateInfo.flags = vertexDescription.flags;
+
+    this->vertexInputInfo = vertexInputStateCreateInfo;
+    return *this;
+}
+
+PipelineBuilder& PipelineBuilder::setVertexInputInfo(VkPipelineVertexInputStateCreateInfo& vertexInputStateCreateInfo) {
+    this->vertexInputInfo = vertexInputStateCreateInfo;
+    return *this;
+}
+
 PipelineBuilder& PipelineBuilder::setInputAssemblyInfo(VkPrimitiveTopology topology) {
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
     inputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
