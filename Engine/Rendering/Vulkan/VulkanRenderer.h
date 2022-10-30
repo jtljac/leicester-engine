@@ -50,7 +50,7 @@ class VulkanRenderer : public Renderer {
     VkSemaphore presentSemaphore, renderSemaphore;
     VkFence renderFence;
 
-    VkPipelineLayout trianglePipelineLayout;
+    VkPipelineLayout meshPipelineLayout;
     VkPipeline trianglePipeline;
     VkPipeline colourTrianglePipeline;
     VkPipeline meshTrianglePipeline;
