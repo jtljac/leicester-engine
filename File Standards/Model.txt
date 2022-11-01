@@ -1,0 +1,35 @@
+```
+Header {
+    u8  version
+    u32 vertexCount
+    u32 indexCount
+}
+```
+
+```
+Vec {
+    float32 x
+    float32 y
+    float32 z
+}
+```
+
+```
+Vertex {
+    Vec position
+    Vec normal
+    Vec colour
+}
+```
+
+```
+File {
+    Header      head
+    Vertex[]    vertices    Size = vertexCount
+    u32[]       indices     Size = indexCount
+}
+```
+
+# Description
+The File is split into 3 parts:
+ * The header, which holds
