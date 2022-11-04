@@ -12,6 +12,7 @@ target_link_libraries(leicester-engine vulkan)
 add_subdirectory(vk-bootstrap)
 target_link_libraries(leicester-engine vk-bootstrap::vk-bootstrap)
 
+# Vulkan Memory Manager
 add_subdirectory(vulkan-memory-manager)
 target_link_libraries(leicester-engine VulkanMemoryAllocator)
 

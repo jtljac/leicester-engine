@@ -10,7 +10,11 @@ The following libraries have been used to speed up development and fill in boile
 boilerplate involved in setting up vulkan 
  - [Vulkan Memory Manager](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator) - A library to help with 
 all the boilerplate involved in managing GPU memory
+ - [tinyobjloader](https://github.com/tinyobjloader/tinyobjloader) - A library for loading .obj wavefront files as models
 
-With the exception of VK-Bookstrap and Vulkan Memory Manager, these libraries are loaded using CMake's `find_package` directive, thus must be
+With the exception of VK-Bookstrap, Vulkan Memory Manager, and tinyobjloader, these libraries are loaded using CMake's `find_package` directive, thus must be
 installed on the system building the project.
+
 VK-Boostrap and Vulkan Memory Manager are loaded as git submodules.
+
+Tinyobjloader has been downloaded and stored in this repository alongside its license.
