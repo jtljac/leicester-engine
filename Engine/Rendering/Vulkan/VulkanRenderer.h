@@ -59,6 +59,7 @@ class VulkanRenderer : public Renderer {
     std::vector<AllocatedBuffer> memoryList;
 
     Mesh triangleMesh;
+    Mesh monkeyMesh;
 
 protected:
     /**

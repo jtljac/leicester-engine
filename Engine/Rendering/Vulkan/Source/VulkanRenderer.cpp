@@ -35,7 +35,10 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
 
     triangleMesh.indices = {0, 1, 2};
 
+    monkeyMesh.loadMeshFromFile(FileUtils::getAssetsPath() + "/Monkey.lmesh");
+
     uploadMesh(triangleMesh);
+    uploadMesh(monkeyMesh);
 
     return true;
 }
@@ -463,8 +466,8 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
 
         vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->meshTrianglePipeline);
 
-        AllocatedBuffer vertBuffer = this->memoryList[this->triangleMesh.verticesIndex];
-        AllocatedBuffer indBuffer = this->memoryList[this->triangleMesh.indicesIndex];
+        AllocatedBuffer vertBuffer = this->memoryList[this->monkeyMesh.verticesIndex];
+        AllocatedBuffer indBuffer = this->memoryList[this->monkeyMesh.indicesIndex];
         VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
         vkCmdBindIndexBuffer(this->commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
@@ -479,7 +482,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
         MeshPushConstants pushConstants = {renderMatrix};
         vkCmdPushConstants(this->commandBuffer, this->meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-        vkCmdDrawIndexed(this->commandBuffer, this->triangleMesh.indices.size(), 1, 0, 0, 0);
+        vkCmdDrawIndexed(this->commandBuffer, this->monkeyMesh.indices.size(), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(this->commandBuffer);
     }
