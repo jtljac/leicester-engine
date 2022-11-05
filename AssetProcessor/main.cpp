@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <cstring>
 #include "FileProcessors/ObjProcessor.h"
+#include "FileProcessors/ShaderProcessor.h"
 #include "FileProcessors/CopyProcessor.h"
 
 std::unordered_map<std::string, BaseProcessor*> processorMap;
@@ -55,9 +56,9 @@ int main(int argc, char** argv) {
     }
     // Register Processors
     {
-//        auto* shaderProcessor = new ShaderProcessor(shaderIncludePath);
-//        processorMap.emplace(".frag", shaderProcessor);
-//        processorMap.emplace(".vert", shaderProcessor);
+        auto* shaderProcessor = new ShaderProcessor(shaderIncludePath);
+        processorMap.emplace(".frag", shaderProcessor);
+        processorMap.emplace(".vert", shaderProcessor);
 
         processorMap.emplace(".obj", new ObjProcessor());
     }

@@ -4,3 +4,15 @@
 [submodule "Third-Party/vulkan-memory-manager"]
 	path = Third-Party/vulkan-memory-manager
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "AssetProcessor/Third-Party/shaderc"]
+	path = AssetProcessor/Third-Party/shaderc
+	url = https://github.com/google/shaderc
+[submodule "AssetProcessor/Third-Party/glslang"]
+	path = AssetProcessor/Third-Party/glslang
+	url = https://github.com/KhronosGroup/glslang.git
+[submodule "AssetProcessor/Third-Party/SPIRV-Headers"]
+	path = AssetProcessor/Third-Party/SPIRV-Headers
+	url = https://github.com/KhronosGroup/SPIRV-Headers
+[submodule "AssetProcessor/Third-Party/SPIRV-Tools"]
+	path = AssetProcessor/Third-Party/SPIRV-Tools
+	url = https://github.com/KhronosGroup/SPIRV-Tools

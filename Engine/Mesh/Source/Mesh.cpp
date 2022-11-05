@@ -15,7 +15,7 @@ bool Mesh::loadMeshFromFile(const std::string& filePath) {
         Logger::warn("Failed to load mesh at " + filePath);
         return false;
     }
-    std::ifstream file(filePath);
+    std::ifstream file(filePath, std::ios::binary);
     uint8_t version;
     uint32_t vertexCount, indexCount;
     file.read(reinterpret_cast<char*>(&version), 1);

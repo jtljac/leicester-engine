@@ -33,8 +33,8 @@ class ShaderProcessor : public BaseProcessor {
     shaderc_shader_kind kindFromExtension(const std::string& extension);
     static std::string loadShaderCode(const std::string& src);
     std::string preprocessShader(const std::string& shaderCode, shaderc_shader_kind kind, const std::string& sourceFile);
-    std::vector<char> compileShader(const std::string& shaderCode, shaderc_shader_kind kind, const std::string& src);
-    static void writeShader(const std::string& dest, const std::vector<char>& spv);
+    std::vector<uint32_t> compileShader(const std::string& shaderCode, shaderc_shader_kind kind, const std::string& src);
+    static void writeShader(const std::string& dest, const std::vector<uint32_t>& spv);
 
 public:
     ShaderProcessor() = default;

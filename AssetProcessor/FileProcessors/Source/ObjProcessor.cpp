@@ -67,7 +67,7 @@ void ObjProcessor::processFile(const std::string& src, const std::string& dest) 
 }
 
 void ObjProcessor::writeMesh(const std::string& dest, std::vector<Vertex>& vertices, std::vector<uint32_t>& indices) {
-    std::ofstream destFile(dest);
+    std::ofstream destFile(dest, std::ios::binary);
     uint32_t vertexCount = vertices.size();
     uint32_t indexCount = indices.size();
 

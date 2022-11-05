@@ -95,7 +95,8 @@ std::string ShaderProcessor::preprocessShader(const std::string& shaderCode, sha
     shaderc::PreprocessedSourceCompilationResult preprocessorResult = compiler.PreprocessGlsl(
             shaderCode,
             kind,
-            sourceFile.c_str(), options
+            sourceFile.c_str(),
+            options
     );
 
     if (preprocessorResult.GetCompilationStatus() != shaderc_compilation_status_success) {
@@ -108,11 +109,12 @@ std::string ShaderProcessor::preprocessShader(const std::string& shaderCode, sha
 
 
 
-std::vector<char> ShaderProcessor::compileShader(const std::string& shaderCode, shaderc_shader_kind kind, const std::string& src) {
+std::vector<uint32_t> ShaderProcessor::compileShader(const std::string& shaderCode, shaderc_shader_kind kind, const std::string& src) {
     shaderc::CompilationResult compileResult = compiler.CompileGlslToSpv(
             shaderCode,
             kind,
-            src.c_str()
+            src.c_str(),
+            options
     );
 
     if (compileResult.GetCompilationStatus() != shaderc_compilation_status_success) {
@@ -123,10 +125,10 @@ std::vector<char> ShaderProcessor::compileShader(const std::string& shaderCode, 
     return {compileResult.begin(), compileResult.end()};
 }
 
-void ShaderProcessor::writeShader(const std::string& dest, const std::vector<char>& spv) {
-    std::ofstream writer(dest);
+void ShaderProcessor::writeShader(const std::string& dest, const std::vector<uint32_t>& spv) {
+    std::ofstream writer(dest, std::ios::binary);
 
-    writer.write(spv.data(), spv.size());
+    writer.write(reinterpret_cast<const char*>(spv.data()), spv.size() * sizeof(uint32_t));
 
     writer.close();
 }
@@ -144,7 +146,7 @@ void ShaderProcessor::processFile(const std::string& src, const std::string& des
 
     std::string processed = preprocessShader(glslText, kind, src);
 
-    std::vector<char> spv = compileShader(processed, kind, src);
+    std::vector<uint32_t> spv = compileShader(processed, kind, src);
 
     writeShader(dest + ".spv", spv);
 }
