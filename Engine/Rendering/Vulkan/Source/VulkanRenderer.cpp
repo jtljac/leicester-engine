@@ -217,40 +217,138 @@ bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
 
     this->swapchainImageFormat = vkbSwapchain.image_format;
 
+    // Depth Buffer
+    {
+        VkExtent3D depthExtent = {settings.windowWidth, settings.windowHeight, 1};
+        this->depthFormat = VK_FORMAT_D32_SFLOAT;
+        VkImageCreateInfo imageCreateInfo = {};
+        imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageCreateInfo.pNext = nullptr;
+        imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageCreateInfo.format = this->depthFormat;
+        imageCreateInfo.extent = depthExtent;
+        imageCreateInfo.mipLevels = 1;
+        imageCreateInfo.arrayLayers = 1;
+        imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+        VmaAllocationCreateInfo allocationCreateInfo = {};
+        allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        allocationCreateInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+        vmaCreateImage(this->allocator, &imageCreateInfo, &allocationCreateInfo, &this->depthImage.image, &this->depthImage.allocation, nullptr);
+
+        VkImageViewCreateInfo imageViewCreateInfo = {};
+        imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        imageViewCreateInfo.pNext = nullptr;
+
+        imageViewCreateInfo.image = this->depthImage.image;
+        imageViewCreateInfo.format = this->depthFormat;
+        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+        imageViewCreateInfo.subresourceRange.levelCount = 1;
+        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+        imageViewCreateInfo.subresourceRange.layerCount = 1;
+        imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+        if (vkCreateImageView(this->device, &imageViewCreateInfo, nullptr, &this->depthImageView) != VK_SUCCESS) {
+            Logger::error("Failed to create depth imageview");
+            return false;
+        }
+    }
     return true;
 }
 
 bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
     VkAttachmentDescription colourAttachment = {};
-    colourAttachment.format = swapchainImageFormat;
-    colourAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    {
+        colourAttachment.format = swapchainImageFormat;
+        colourAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 
-    colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
-    colourAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colourAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colourAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colourAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-    colourAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colourAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colourAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colourAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    }
 
     VkAttachmentReference colourAttachmentReference = {};
+    {
+        colourAttachmentReference.attachment = 0;
+        colourAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
 
-    colourAttachmentReference.attachment = 0;
-    colourAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkSubpassDependency colourSubpassDependency = {};
+    {
+        colourSubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        colourSubpassDependency.dstSubpass = 0;
+        colourSubpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        colourSubpassDependency.srcAccessMask = 0;
+        colourSubpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        colourSubpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    }
+
+    VkAttachmentDescription depthAttachment = {};
+    {
+        depthAttachment.flags = 0;
+
+        depthAttachment.format = this->depthFormat;
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+    }
+
+    VkAttachmentReference depthAttachmentReference = {};
+    {
+        depthAttachmentReference.attachment = 1;
+        depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    }
+
+    VkSubpassDependency depthSubpassDependency = {};
+    {
+        depthSubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        depthSubpassDependency.dstSubpass = 0;
+        depthSubpassDependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        depthSubpassDependency.srcAccessMask = 0;
+        depthSubpassDependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        depthSubpassDependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
 
     VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colourAttachmentReference;
+    {
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colourAttachmentReference;
+        subpass.pDepthStencilAttachment = &depthAttachmentReference;
+    }
 
+    VkAttachmentDescription attachments[2] = {colourAttachment, depthAttachment};
+    VkSubpassDependency dependencies[2] = {colourSubpassDependency, depthSubpassDependency};
     VkRenderPassCreateInfo renderPassCreateInfo = {};
-    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    {
+        renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 
-    renderPassCreateInfo.attachmentCount = 1;
-    renderPassCreateInfo.pAttachments = &colourAttachment;
-    renderPassCreateInfo.subpassCount = 1;
-    renderPassCreateInfo.pSubpasses = &subpass;
+        renderPassCreateInfo.attachmentCount = 2;
+        renderPassCreateInfo.pAttachments = attachments;
+
+        renderPassCreateInfo.subpassCount = 1;
+        renderPassCreateInfo.pSubpasses = &subpass;
+
+        renderPassCreateInfo.dependencyCount = 2;
+        renderPassCreateInfo.pDependencies = dependencies;
+    }
 
     if (vkCreateRenderPass(this->device, &renderPassCreateInfo, nullptr, &renderPass) != VK_SUCCESS) {
         Logger::error("Failed to create renderpass");
@@ -266,7 +364,7 @@ bool VulkanRenderer::initFramebuffers(EngineSettings& settings) {
     framebufferCreateInfo.pNext = nullptr;
 
     framebufferCreateInfo.renderPass = this->renderPass;
-    framebufferCreateInfo.attachmentCount = 1;
+    framebufferCreateInfo.attachmentCount = 2;
     framebufferCreateInfo.width = settings.windowWidth;
     framebufferCreateInfo.height = settings.windowHeight;
     framebufferCreateInfo.layers = 1;
@@ -275,7 +373,8 @@ bool VulkanRenderer::initFramebuffers(EngineSettings& settings) {
     this->framebuffers = std::vector<VkFramebuffer>(swapchainLength);
 
     for (int i = 0; i < swapchainLength; ++i) {
-        framebufferCreateInfo.pAttachments = &this->swapchainImageViews[i];
+        VkImageView attachments[2] = {this->swapchainImageViews[i], depthImageView};
+        framebufferCreateInfo.pAttachments = attachments;
         if (vkCreateFramebuffer(this->device, &framebufferCreateInfo, nullptr, &this->framebuffers[i]) != VK_SUCCESS) {
             Logger::error("Failed to create framebuffer");
             return false;
@@ -363,6 +462,7 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
         .setRasterisationState(VK_POLYGON_MODE_FILL)
         .setMultisampleStateDefault()
         .setColourBlendAttachmentDefault()
+        .setDepthStencilState(true, true, VK_COMPARE_OP_LESS, false)
         .buildPipeline();
 
     if (!meshPipeline.has_value()) {
@@ -386,6 +486,10 @@ bool VulkanRenderer::initPipelines(EngineSettings& settings) {
 
 void VulkanRenderer::cleanupSwapchain() {
     vkDeviceWaitIdle(this->device);
+
+    vkDestroyImageView(this->device, this->depthImageView, nullptr);
+    vmaDestroyImage(this->allocator, this->depthImage.image, this->depthImage.allocation);
+
     vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
 
     for (int i = 0; i < this->swapchainImageViews.size(); ++i) {
@@ -443,9 +547,14 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(this->commandBuffer, &commandBufferBeginInfo);
 
-    VkClearValue clearValue;
+    VkClearValue clearValues[2];
     float flash = (float) std::abs(std::sin(gameTime));
-    clearValue.color = {{0.f, 0.f, flash, 1.f}};
+    clearValues[0].color = {{0.f, 0.f, flash, 1.f}};
+
+    clearValues[1].depthStencil.depth = 1.f;
+    clearValues[1].depthStencil.stencil = 0;
+
+
 
     VkRenderPassBeginInfo renderPassBeginInfo = {};
     renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -457,8 +566,8 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     renderPassBeginInfo.renderArea.extent = {1366, 768};
     renderPassBeginInfo.framebuffer = this->framebuffers[swapchainIndex];
 
-    renderPassBeginInfo.clearValueCount = 1;
-    renderPassBeginInfo.pClearValues = &clearValue;
+    renderPassBeginInfo.clearValueCount = 2;
+    renderPassBeginInfo.pClearValues = clearValues;
 
     // Renderpass
     {

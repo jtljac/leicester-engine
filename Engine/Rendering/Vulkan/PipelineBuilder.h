@@ -25,6 +25,7 @@ class PipelineBuilder {
     VkPipelineRasterizationStateCreateInfo rasterizationState = {};
     VkPipelineColorBlendAttachmentState colourBlendAttachment = {};
     VkPipelineMultisampleStateCreateInfo multisampleState = {};
+    VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
 
     VkDevice device;
     VkRenderPass renderPass;
@@ -178,6 +179,29 @@ public:
      * @return the PipelineBuilder
      */
     PipelineBuilder& setColourBlendAttachment(VkPipelineColorBlendAttachmentState& colourBlendAttachmentState);
+
+    /**
+     * Set the depthStencilState to the default, with depth testing and writing disabled
+     * @return the Pipeline Builder
+     */
+    PipelineBuilder& setDepthStencilStateDefault();
+
+    /**
+     * Set the depthStencilState
+     * @param depthTest Whether to perform the depth test
+     * @param depthWrite Whether to write the depth to the depth buffer
+     * @param compareOp The compare operation for the depth test
+     * @param stencilTest Whether to perform the stencil test
+     * @return the PipelineBuilder
+     */
+    PipelineBuilder& setDepthStencilState(bool depthTest, bool depthWrite, VkCompareOp compareOp, bool stencilTest);
+
+    /**
+     * Set the depthStencilState
+     * @param depthStencilStateCreateInfo A ready made VkPipelineDpethStencilCreateInfo
+     * @return the PipelineBuilder
+     */
+    PipelineBuilder& setDepthStencilState(VkPipelineDepthStencilStateCreateInfo& depthStencilStateCreateInfo);
 
     /**
      * Build the pipeline

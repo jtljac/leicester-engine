@@ -9,10 +9,10 @@
 
 struct EngineSettings {
     // Window
-    const int windowWidth = 1366;
-    const int windowHeight = 768;
+    const unsigned int windowWidth = 1366;
+    const unsigned int windowHeight = 768;
 
-    const int bufferCount = 2;
+    const unsigned int bufferCount = 2;
 
     const std::string windowTitle = "Leicester Engine";
 };

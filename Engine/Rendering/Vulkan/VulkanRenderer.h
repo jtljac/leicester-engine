@@ -17,7 +17,7 @@
 #include "../Renderer.h"
 #include <Mesh/Mesh.h>
 #include "DeletionQueue.h"
-#include "AllocatedBuffer.h"
+#include "AllocationStructures.h"
 
 class VulkanRenderer : public Renderer {
     // Vulkan Handles
@@ -41,6 +41,11 @@ class VulkanRenderer : public Renderer {
     VkFormat swapchainImageFormat;                  // The format of the swapchain
     std::vector<VkImage> swapchainImages;           // The images in the swapchain
     std::vector<VkImageView> swapchainImageViews;   // The image view wrappers
+
+    // Depth Buffer
+    VkImageView depthImageView;
+    AllocatedImage depthImage;
+    VkFormat depthFormat;
 
     // Renderpass
     VkRenderPass renderPass;                    // The renderpass handle
