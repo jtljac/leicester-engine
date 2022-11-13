@@ -32,6 +32,8 @@ bool Renderer::initialiseGlfw(EngineSettings& settings) {
 }
 
 bool Renderer::initialise(EngineSettings& settings) {
+    this->settings = &settings;
+
     if (!initialiseGlfw(settings)) return false;
 
     return true;

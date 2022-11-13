@@ -22,23 +22,7 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     if (!this->initRenderpass(settings)) return false;
     if (!this->initFramebuffers(settings)) return false;
     if (!this->initSyncObjects(settings)) return false;
-    if (!this->initPipelines(settings)) return false;
-
-    triangleMesh.vertices.resize(3);
-    triangleMesh.vertices[0].position = {0.5f, 0.5f, 0.f};
-    triangleMesh.vertices[1].position = {-0.5f, 0.5f, 0.f};
-    triangleMesh.vertices[2].position = {0.f, -0.5f, 0.f};
-
-    triangleMesh.vertices[0].colour = {1.f, 0.f, 0.f};
-    triangleMesh.vertices[1].colour = {0.f, 1.f, 0.f};
-    triangleMesh.vertices[2].colour = {0.f, 0.f, 1.f};
-
-    triangleMesh.indices = {0, 1, 2};
-
-    monkeyMesh.loadMeshFromFile(FileUtils::getAssetsPath() + "/Monkey.lmesh");
-
-    uploadMesh(triangleMesh);
-    uploadMesh(monkeyMesh);
+    this->initRender(settings);
 
     return true;
 }
@@ -415,71 +399,35 @@ bool VulkanRenderer::initSyncObjects(EngineSettings& settings) {
 
 
 
-bool VulkanRenderer::initPipelines(EngineSettings& settings) {
-    VkShaderModule colourTriangleFrag;
-    if (!this->loadShader(FileUtils::getAssetsPath() + "/colourtriangle.frag.spv", &colourTriangleFrag)) {
-        Logger::error("Failed to open triangle frag shader");
-        return false;
-    }
+bool VulkanRenderer::initRender(EngineSettings& settings) {
+    StaticMesh monkey;
+    monkey.mesh = new Mesh();
+    monkey.mesh->loadMeshFromFile(FileUtils::getAssetsPath() + "/Monkey.lmesh");
+    monkey.material = new Material("/meshtriangle.vert.spv", "/colourtriangle.frag.spv");
 
-    VkShaderModule meshTriangleVert;
-    if (!this->loadShader(FileUtils::getAssetsPath() + "/meshtriangle.vert.spv", &meshTriangleVert)) {
-        Logger::error("Failed to open triangle vert shader");
-        return false;
-    }
+    this->uploadMesh(*monkey.mesh);
+    this->createMaterial(*monkey.material);
 
-    {
-        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
-        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutCreateInfo.pNext = nullptr;
+    this->renderables.push_back(monkey);
 
-        pipelineLayoutCreateInfo.flags = 0;
-        pipelineLayoutCreateInfo.setLayoutCount = 0;
-        pipelineLayoutCreateInfo.pSetLayouts = nullptr;
+    StaticMesh triangle;
+    triangle.mesh = new Mesh;
+    triangle.mesh->vertices.resize(3);
+    triangle.mesh->vertices[0].position = {0.5f, 0.5f, 0.f};
+    triangle.mesh->vertices[1].position = {-0.5f, 0.5f, 0.f};
+    triangle.mesh->vertices[2].position = {0.f, -0.5f, 0.f};
 
-        VkPushConstantRange pushConstantRange;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(MeshPushConstants);
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    triangle.mesh->vertices[0].colour = {1.f, 0.f, 0.f};
+    triangle.mesh->vertices[1].colour = {0.f, 1.f, 0.f};
+    triangle.mesh->vertices[2].colour = {0.f, 0.f, 1.f};
 
-        pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-        pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+    triangle.mesh->indices = {0, 1, 2};
 
-        if (vkCreatePipelineLayout(this->device, &pipelineLayoutCreateInfo, nullptr, &this->meshPipelineLayout) !=
-            VK_SUCCESS) {
-            Logger::error("Failed to create pipeline layout");
-            return false;
-        }
-    }
+    triangle.material = new Material("/meshtriangle.vert.spv", "/colourtriangle.frag.spv");
+    this->uploadMesh(*triangle.mesh);
+    this->createMaterial(*triangle.material);
 
-    std::optional<VkPipeline> meshPipeline = PipelineBuilder(this->device, this->renderPass, this->meshPipelineLayout)
-        .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, meshTriangleVert)
-        .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, colourTriangleFrag)
-        .setVertexInputInfo(VertexDescription::getVertexDescription())
-        .setInputAssemblyInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-        .setViewport(0.f, 0.f, (float) settings.windowWidth, (float) settings.windowHeight)
-        .setScissor(0, 0, settings.windowWidth, settings.windowHeight)
-        .setRasterisationState(VK_POLYGON_MODE_FILL)
-        .setMultisampleStateDefault()
-        .setColourBlendAttachmentDefault()
-        .setDepthStencilState(true, true, VK_COMPARE_OP_LESS, false)
-        .buildPipeline();
-
-    if (!meshPipeline.has_value()) {
-        Logger::error("Failed to create pipeline");
-        return false;
-    }
-
-    this->meshTrianglePipeline = meshPipeline.value();
-
-    vkDestroyShaderModule(this->device, colourTriangleFrag, nullptr);
-    vkDestroyShaderModule(this->device, meshTriangleVert, nullptr);
-
-    this->deletionQueue.pushDeletor([trianglePipelineLayout = this->meshPipelineLayout, trianglePipeline = this->trianglePipeline, colourTrianglePipeline = this->colourTrianglePipeline, meshTrianglePipeline = this->meshTrianglePipeline](VkDevice& device) {
-        vkDestroyPipeline(device, meshTrianglePipeline, nullptr);
-
-        vkDestroyPipelineLayout(device, trianglePipelineLayout, nullptr);
-    });
+    this->renderables.push_back(triangle);
 
     return true;
 }
@@ -504,10 +452,15 @@ void VulkanRenderer::cleanup() {
 
     cleanupSwapchain();
 
-    for (auto& allocatedBuffer: memoryList) {
-        vmaDestroyBuffer(this->allocator, allocatedBuffer.buffer, allocatedBuffer.allocation);
+    for (auto& allocatedBuffer: bufferList.getMap()) {
+        vmaDestroyBuffer(this->allocator, allocatedBuffer.second.buffer, allocatedBuffer.second.allocation);
     }
-    memoryList.clear();
+    bufferList.clear();
+
+    for (auto& allocatedBuffer: materialList.getMap()) {
+        allocatedBuffer.second.deleteMaterial(device);
+    }
+    bufferList.clear();
 
     deletionQueue.flush(this->device);
 
@@ -573,25 +526,31 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     {
         vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->meshTrianglePipeline);
-
-        AllocatedBuffer vertBuffer = this->memoryList[this->monkeyMesh.verticesIndex];
-        AllocatedBuffer indBuffer = this->memoryList[this->monkeyMesh.indicesIndex];
-        VkDeviceSize offset = 0;
-        vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
-        vkCmdBindIndexBuffer(this->commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
-
         glm::vec3 camPos = {0.f, 0.f, -2};
-
         glm::mat4 view = glm::translate(glm::mat4(1.f), camPos);
         glm::mat4 proj = glm::perspective(glm::radians(90.f), 1366.f/768.f, 0.1f, 200.f);
-        glm::mat4 model = glm::rotate(glm::mat4{1.f}, glm::radians((float) gameTime * 100), glm::vec3(0, 1, 0));
-        glm::mat4 renderMatrix = proj * view * model;
+        int multiplier = 1;
 
-        MeshPushConstants pushConstants = {renderMatrix};
-        vkCmdPushConstants(this->commandBuffer, this->meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+        for (auto& mesh : renderables) {
+            VMaterial vMat = materialList.get(mesh.material->materialId);
+            vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
 
-        vkCmdDrawIndexed(this->commandBuffer, this->monkeyMesh.indices.size(), 1, 0, 0, 0);
+            AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesIndex);
+            AllocatedBuffer indBuffer = this->bufferList.get(mesh.mesh->indicesIndex);
+
+            VkDeviceSize offset = 0;
+            vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+            vkCmdBindIndexBuffer(this->commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+
+            glm::mat4 model = glm::rotate(glm::mat4{1.f}, glm::radians((float) gameTime * 100 * multiplier), glm::vec3(0, 1, 0));
+            multiplier *= -1;
+            glm::mat4 renderMatrix = proj * view * model;
+
+            MeshPushConstants pushConstants = {renderMatrix};
+            vkCmdPushConstants(this->commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+            vkCmdDrawIndexed(this->commandBuffer, mesh.mesh->indices.size(), 1, 0, 0, 0);
+        }
 
         vkCmdEndRenderPass(this->commandBuffer);
     }
@@ -677,8 +636,7 @@ bool VulkanRenderer::uploadMesh(Mesh& mesh) {
         return false;
     }
 
-    mesh.verticesIndex = memoryList.size();
-    this->memoryList.push_back(allocatedBuffer);
+    mesh.verticesIndex = this->bufferList.insert(allocatedBuffer);
 
     void* data;
     vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
@@ -695,11 +653,75 @@ bool VulkanRenderer::uploadMesh(Mesh& mesh) {
         return false;
     }
 
-    mesh.indicesIndex = memoryList.size();
-    this->memoryList.push_back(allocatedBuffer);
+    mesh.indicesIndex = this->bufferList.insert(allocatedBuffer);
     vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
     memcpy(data, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
     vmaUnmapMemory(this->allocator, allocatedBuffer.allocation);
 
     return true;
 }
+
+bool VulkanRenderer::createMaterial(Material& material) {
+    VkShaderModule frag;
+    if (!this->loadShader(FileUtils::getAssetsPath() + material.spirvFrag, &frag)) {
+        Logger::error("Failed to open frag shader: " + material.spirvFrag);
+        return false;
+    }
+
+    VkShaderModule vert;
+    if (!this->loadShader(FileUtils::getAssetsPath() + material.spirvVert, &vert)) {
+        Logger::error("Failed to open vert shader: " + material.spirvVert);
+        return false;
+    }
+
+    VkPipelineLayout pipelineLayout;
+    {
+        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutCreateInfo.pNext = nullptr;
+
+        pipelineLayoutCreateInfo.flags = 0;
+        pipelineLayoutCreateInfo.setLayoutCount = 0;
+        pipelineLayoutCreateInfo.pSetLayouts = nullptr;
+
+        VkPushConstantRange pushConstantRange;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(MeshPushConstants);
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+        pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+
+        if (vkCreatePipelineLayout(this->device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout) !=
+            VK_SUCCESS) {
+            Logger::error("Failed to create pipeline layout");
+            return false;
+        }
+    }
+
+    std::optional<VkPipeline> pipeline = PipelineBuilder(this->device, this->renderPass, pipelineLayout)
+            .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, vert)
+            .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, frag)
+            .setVertexInputInfo(VertexDescription::getVertexDescription())
+            .setInputAssemblyInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+            .setViewport(0.f, 0.f, (float) this->settings->windowWidth, (float) this->settings->windowHeight)
+            .setScissor(0, 0, this->settings->windowWidth, this->settings->windowHeight)
+            .setRasterisationState(VK_POLYGON_MODE_FILL)
+            .setMultisampleStateDefault()
+            .setColourBlendAttachmentDefault()
+            .setDepthStencilState(true, true, VK_COMPARE_OP_LESS, false)
+            .buildPipeline();
+
+    if (!pipeline.has_value()) {
+        Logger::error("Failed to create pipeline");
+        return false;
+    }
+
+    material.materialId = this->materialList.insert(VMaterial(pipeline.value(), pipelineLayout));
+
+    vkDestroyShaderModule(this->device, frag, nullptr);
+    vkDestroyShaderModule(this->device, vert, nullptr);
+
+    return true;
+}
+

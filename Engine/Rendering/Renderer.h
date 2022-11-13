@@ -17,6 +17,7 @@
 
 class Renderer {
 protected:
+    EngineSettings* settings = nullptr;
     GLFWwindow* window = nullptr;
 
     /**

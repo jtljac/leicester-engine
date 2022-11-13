@@ -18,6 +18,9 @@
 #include <Mesh/Mesh.h>
 #include "DeletionQueue.h"
 #include "AllocationStructures.h"
+#include "Utils/IdTrackedResource.h"
+#include "VMaterial.h"
+#include "Mesh/StaticMesh.h"
 
 class VulkanRenderer : public Renderer {
     // Vulkan Handles
@@ -56,12 +59,13 @@ class VulkanRenderer : public Renderer {
     VkFence renderFence;
 
     VkPipelineLayout meshPipelineLayout;
-    VkPipeline trianglePipeline;
-    VkPipeline colourTrianglePipeline;
     VkPipeline meshTrianglePipeline;
 
     DeletionQueue deletionQueue;        // A queue storing deletion functions
-    std::vector<AllocatedBuffer> memoryList;
+    IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;
+    IDTrackedResource<uint64_t, VMaterial> materialList;
+
+    std::vector<StaticMesh> renderables;
 
     Mesh triangleMesh;
     Mesh monkeyMesh;
@@ -131,7 +135,7 @@ private:
      * @param settings the engine settings
      * @return True if successful
      */
-    bool initPipelines(EngineSettings& settings);
+    bool initRender(EngineSettings& settings);
 
     /**
      * Load the shader at the given path
@@ -142,6 +146,8 @@ private:
     bool loadShader(const std::string& path, VkShaderModule* outShaderModule);
 
     bool uploadMesh(Mesh& mesh);
+
+    bool createMaterial(Material& material);
 
     /**
      * Cleanup the swapchain

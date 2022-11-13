@@ -5,4 +5,5 @@ target_sources(leicester-engine PRIVATE
         Source/PipelineBuilder.cpp
         Source/DeletionQueue.cpp
         Source/VertexDescription.cpp
+        Source/VMaterial.cpp
 )
