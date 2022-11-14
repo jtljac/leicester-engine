@@ -6,7 +6,7 @@
 
 #include <glm/glm.hpp>
 
-struct Camera {
+struct GpuCameraStruct {
     glm::mat4 view;
     glm::mat4 proj;
 };

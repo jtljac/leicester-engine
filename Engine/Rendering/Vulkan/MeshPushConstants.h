@@ -7,5 +7,5 @@
 #include <glm/mat4x4.hpp>
 
 struct MeshPushConstants {
-    glm::mat4 renderMat;
+    glm::mat4 model;
 };

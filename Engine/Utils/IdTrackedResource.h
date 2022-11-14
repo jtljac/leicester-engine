@@ -9,7 +9,7 @@
 
 template<typename KeyType, typename ResourceClass, typename std::enable_if_t<std::is_integral<KeyType>::value>* = nullptr>
 class IDTrackedResource {
-    KeyType nextKey;
+    KeyType nextKey = 1;
     std::unordered_map<KeyType, ResourceClass> resourceMap;
 
 public:
@@ -26,7 +26,7 @@ public:
         resourceMap.erase(key);
     }
     void clear() {
-        nextKey = 0;
+        nextKey = 1;
         resourceMap.clear();
     }
 

@@ -38,18 +38,22 @@ class VulkanRenderer : public Renderer {
     VkQueue graphicsQueue;          // The queue used for graphics commands
 
     // Swapchain
-    VkSwapchainKHR swapchain;       // Swap Chain handle
-    VkFormat swapchainImageFormat;  // The format of the swapchain
+    VkSwapchainKHR swapchainHandle;     // Swap Chain handle
+    VkFormat swapchainImageFormat;      // The format of the swapchainHandle
 
     // Depth Buffer
-    VkFormat depthFormat;           // The format of the depth buffer
+    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;    // The format of the depth buffer
 
     // Renderpass
     VkRenderPass renderPass;        // The renderpass handle
 
+    // Descriptor Set
+    VkDescriptorSetLayout globalDescriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+
     // Frame Data
     unsigned int currentFrame = 0;              // The current frame being rendered
-    std::vector<SwapchainData> swapchainData;   // An array containing the data of each frame of the swapchain
+    std::vector<SwapchainData> swapchainData;   // An array containing the data of each frame of the swapchainHandle
     std::vector<FrameData> frameData;           // An array containing the data of each frame
 
     DeletionQueue deletionQueue;    // A queue storing deletion functions
@@ -77,7 +81,6 @@ protected:
     };
 
 private:
-
     /**
      * Sets up the Vulkan instance, the device, and the queues
      * Populates vInstance, DebugMessenger, gpu, device, surface, graphicsQueue, and frameData
@@ -87,6 +90,12 @@ private:
      * @return True if successful
      */
     bool initVulkan(EngineSettings& settings);
+
+    /**
+     * Setup the descriptors used by the pipelines
+     * @param settings the engine settings
+     */
+    void initDescriptors(EngineSettings& settings);
 
     /**
      * Initialises the frameData objects
@@ -107,7 +116,7 @@ private:
     bool initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData, unsigned int graphicsQueueIndex);
 
     /**
-     * Initialise the semaphores and fences of the given frameData
+     * Initialise the semaphores and fences of the given FrameData
      * Populates presentSemaphore, renderSemaphore, and renderFence
      * @param settings the engine settings
      * @param frameData the FrameData object being populated
@@ -116,17 +125,36 @@ private:
     bool initFrameDataSyncObjects(EngineSettings& settings, FrameData& frameData);
 
     /**
-     * Sets up the swapchain
-     * Populates swapchain, swapchainImageFormat, swapchainImages, and swapchainImageViews
+     * Initialises the description sets of the given FrameData
+     * Populates cameraBuffer
+     * @param settings the engine settings
+     * @param frameData the FrameData object being populated
+     * @return True if successful
+     */
+    void initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData);
+
+    /**
+     * Sets up the swapchainHandle
+     * Populates swapchainHandle, swapchainImageFormat, swapchainImages, and swapchainImageViews
      * @param settings the engine settings
      * @return True if successful
      */
     bool initSwapchain(EngineSettings& settings);
 
     /**
-     * Setup the framebuffers used for rendering to
-     * Populates framebuffers
+     * Sets up the depth buffers for the given SwapchainData
+     * Populates depthImage & depthImageView
      * @param settings the engine settings
+     * @param swapchain the SwapchainData being populated
+     * @return True if successful
+     */
+    bool initSwapchainDepthBuffer(EngineSettings& settings, SwapchainData& swapchain);
+
+    /**
+     * Setup the framebuffers used for rendering to for the given SwapchainData
+     * Populates framebuffer
+     * @param settings the engine settings
+     * @param swapchain the SwapchainData being populated
      * @return True if successful
      */
     bool initFramebuffers(EngineSettings& settings);
@@ -187,8 +215,8 @@ private:
     FrameData& getCurrentFrame();
 
     /**
-     * Cleanup the swapchain
-     * This is separated out so the swapchain can be recreated without destroying the whole vulkan context
+     * Cleanup the swapchainHandle
+     * This is separated out so the swapchainHandle can be recreated without destroying the whole vulkan context
      */
     void cleanupSwapchain();
 protected:
