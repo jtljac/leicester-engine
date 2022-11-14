@@ -644,22 +644,29 @@ bool VulkanRenderer::loadShader(const std::string& path, VkShaderModule* outShad
     return true;
 }
 
-bool VulkanRenderer::uploadMesh(Mesh& mesh) {
+AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
     VkBufferCreateInfo bufferCreateInfo = {};
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.size = mesh.vertices.size() * sizeof(Vertex);
-    bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferCreateInfo.pNext = nullptr;
+
+    bufferCreateInfo.size = allocSize;
+    bufferCreateInfo.usage = usage;
 
     VmaAllocationCreateInfo allocationCreateInfo = {};
-    allocationCreateInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    allocationCreateInfo.usage = memoryUsage;
 
     AllocatedBuffer allocatedBuffer;
 
     if (vmaCreateBuffer(this->allocator, &bufferCreateInfo, &allocationCreateInfo, &allocatedBuffer.buffer, &allocatedBuffer.allocation, nullptr) != VK_SUCCESS) {
-        Logger::warn("Failed to create upload mesh vertices to GPU");
-        return false;
+        Logger::warn("Failed to allocate buffer");
+        return {VK_NULL_HANDLE, VK_NULL_HANDLE};
     }
 
+    return allocatedBuffer;
+}
+
+bool VulkanRenderer::uploadMesh(Mesh& mesh) {
+    AllocatedBuffer allocatedBuffer = this->createBuffer(mesh.vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     mesh.verticesId = this->bufferList.insert(allocatedBuffer);
 
     void* data;
@@ -667,15 +674,7 @@ bool VulkanRenderer::uploadMesh(Mesh& mesh) {
     memcpy(data, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
     vmaUnmapMemory(this->allocator, allocatedBuffer.allocation);
 
-    bufferCreateInfo.size = mesh.indices.size() * sizeof(uint32_t);
-    bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-
-    allocatedBuffer = AllocatedBuffer();
-
-    if (vmaCreateBuffer(this->allocator, &bufferCreateInfo, &allocationCreateInfo, &allocatedBuffer.buffer, &allocatedBuffer.allocation, nullptr) != VK_SUCCESS) {
-        Logger::warn("Failed to create upload mesh indices to GPU");
-        return false;
-    }
+    allocatedBuffer = this->createBuffer(mesh.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
     mesh.indicesId = this->bufferList.insert(allocatedBuffer);
     vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);

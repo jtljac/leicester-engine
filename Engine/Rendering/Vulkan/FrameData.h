@@ -17,6 +17,13 @@ struct FrameData {
     // Commands
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
+
+    // Descriptor Sets
+    VkDescriptorSet globalDescriptor;
+
+    // Buffers
+    AllocatedBuffer cameraBuffer;
+
 };
 
 struct SwapchainData {

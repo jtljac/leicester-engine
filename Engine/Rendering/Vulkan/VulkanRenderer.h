@@ -32,28 +32,27 @@ class VulkanRenderer : public Renderer {
     VkSurfaceKHR surface;                       // Window surface handle
 
     // Memory Management
-    VmaAllocator allocator;                     // The GPU memory allocator
+    VmaAllocator allocator;         // The GPU memory allocator
 
     // Queues
-    VkQueue graphicsQueue;              // The queue used for graphics commands
+    VkQueue graphicsQueue;          // The queue used for graphics commands
 
     // Swapchain
-    VkSwapchainKHR swapchain;                       // Swap Chain handle
-    VkFormat swapchainImageFormat;                  // The format of the swapchain
+    VkSwapchainKHR swapchain;       // Swap Chain handle
+    VkFormat swapchainImageFormat;  // The format of the swapchain
 
     // Depth Buffer
-    VkFormat depthFormat;
+    VkFormat depthFormat;           // The format of the depth buffer
 
     // Renderpass
-    VkRenderPass renderPass;                    // The renderpass handle
+    VkRenderPass renderPass;        // The renderpass handle
 
     // Frame Data
-    unsigned int currentFrame = 0;
-    std::vector<SwapchainData> swapchainData;
-    std::vector<FrameData> frameData;
+    unsigned int currentFrame = 0;              // The current frame being rendered
+    std::vector<SwapchainData> swapchainData;   // An array containing the data of each frame of the swapchain
+    std::vector<FrameData> frameData;           // An array containing the data of each frame
 
-
-    DeletionQueue deletionQueue;        // A queue storing deletion functions
+    DeletionQueue deletionQueue;    // A queue storing deletion functions
 
     // GPU Memory Trackers
     IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;    // Stores Allocated Buffers against an ID
@@ -147,6 +146,7 @@ private:
      */
     bool initRender(EngineSettings& settings);
 
+    // Resource Handling
     /**
      * Load the shader at the given path
      * @param path The path to the shader on the disk
@@ -154,6 +154,15 @@ private:
      * @return True if successful
      */
     bool loadShader(const std::string& path, VkShaderModule* outShaderModule);
+
+    /**
+     * Allocated GPU memory
+     * @param allocSize The amount of memory to allocated
+     * @param usage The buffer usage flags
+     * @param memoryUsage the vma Memory usage flags
+     * @return
+     */
+    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 
     /**
      * Upload a mesh to the GPU
