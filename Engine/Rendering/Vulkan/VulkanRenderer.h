@@ -21,6 +21,7 @@
 #include "Utils/IdTrackedResource.h"
 #include "VMaterial.h"
 #include "Mesh/StaticMesh.h"
+#include "FrameData.h"
 
 class VulkanRenderer : public Renderer {
     // Vulkan Handles
@@ -36,39 +37,29 @@ class VulkanRenderer : public Renderer {
     // Queues
     VkQueue graphicsQueue;              // The queue used for graphics commands
 
-    VkCommandPool graphicsCommandPool;  // The command pool for graphics commands
-    VkCommandBuffer commandBuffer;      // The command buffer
-
     // Swapchain
     VkSwapchainKHR swapchain;                       // Swap Chain handle
     VkFormat swapchainImageFormat;                  // The format of the swapchain
-    std::vector<VkImage> swapchainImages;           // The images in the swapchain
-    std::vector<VkImageView> swapchainImageViews;   // The image view wrappers
 
     // Depth Buffer
-    VkImageView depthImageView;
-    AllocatedImage depthImage;
     VkFormat depthFormat;
 
     // Renderpass
     VkRenderPass renderPass;                    // The renderpass handle
-    std::vector<VkFramebuffer> framebuffers;    // A list of framebuffer handles
 
-    // Sync objects
-    VkSemaphore presentSemaphore, renderSemaphore;
-    VkFence renderFence;
+    // Frame Data
+    unsigned int currentFrame = 0;
+    std::vector<SwapchainData> swapchainData;
+    std::vector<FrameData> frameData;
 
-    VkPipelineLayout meshPipelineLayout;
-    VkPipeline meshTrianglePipeline;
 
     DeletionQueue deletionQueue;        // A queue storing deletion functions
-    IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;
-    IDTrackedResource<uint64_t, VMaterial> materialList;
+
+    // GPU Memory Trackers
+    IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;    // Stores Allocated Buffers against an ID
+    IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
 
     std::vector<StaticMesh> renderables;
-
-    Mesh triangleMesh;
-    Mesh monkeyMesh;
 
 protected:
     /**
@@ -90,13 +81,40 @@ private:
 
     /**
      * Sets up the Vulkan instance, the device, and the queues
-     * Populates vInstance, DebugMessenger, gpu, device, surface, graphicsQueue, graphicsCommandPool, and commandBuffer
+     * Populates vInstance, DebugMessenger, gpu, device, surface, graphicsQueue, and frameData
      *
      * This function is monolithic in order to contain all of the vk_bootstrap content together without creating unnecessary class members
      * @param settings the engine settings
      * @return True if successful
      */
     bool initVulkan(EngineSettings& settings);
+
+    /**
+     * Initialises the frameData objects
+     * @param settings the engine settings
+     * @param graphicsQueueIndex the index of the graphics queue used for the command pools
+     * @return True if successful
+     */
+    bool initFrameData(EngineSettings& settings, unsigned int graphicsQueueIndex);
+
+    /**
+     * Initialises the graphics pools in the provided FrameData
+     * Populates commandPool and commandBuffer
+     * @param settings the engine settings
+     * @param frameData the FrameData object being populated
+     * @param graphicsQueueIndex the index of the graphics queue used for the command pools
+     * @return True if successful
+     */
+    bool initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData, unsigned int graphicsQueueIndex);
+
+    /**
+     * Initialise the semaphores and fences of the given frameData
+     * Populates presentSemaphore, renderSemaphore, and renderFence
+     * @param settings the engine settings
+     * @param frameData the FrameData object being populated
+     * @return True if successful
+     */
+    bool initFrameDataSyncObjects(EngineSettings& settings, FrameData& frameData);
 
     /**
      * Sets up the swapchain
@@ -107,14 +125,6 @@ private:
     bool initSwapchain(EngineSettings& settings);
 
     /**
-     * Setup the render pass
-     * Populates renderpass
-     * @param settings the engine settings
-     * @return
-     */
-    bool initRenderpass(EngineSettings& settings);
-
-    /**
      * Setup the framebuffers used for rendering to
      * Populates framebuffers
      * @param settings the engine settings
@@ -123,12 +133,12 @@ private:
     bool initFramebuffers(EngineSettings& settings);
 
     /**
-     * Initialise the semaphores and fences used to sync the rendering operations
-     * Populates presentSemaphore, renderSemaphore, and renderFence
+     * Setup the render pass
+     * Populates renderpass
      * @param settings the engine settings
-     * @return True if successful
+     * @return
      */
-    bool initSyncObjects(EngineSettings& settings);
+    bool initRenderpass(EngineSettings& settings);
 
     /**
      * Initialise the shader pipeline
@@ -145,9 +155,27 @@ private:
      */
     bool loadShader(const std::string& path, VkShaderModule* outShaderModule);
 
+    /**
+     * Upload a mesh to the GPU
+     * Sets the vertices and indices ids of the mesh
+     * @param mesh The mesh to upload
+     * @return True if successful
+     */
     bool uploadMesh(Mesh& mesh);
 
+    /**
+     * Uploads a material to the GPU
+     * Sets the materialId of the material
+     * @param material the material to upload
+     * @return True if successful
+     */
     bool createMaterial(Material& material);
+
+    /**
+     * Gets the frameData of the current frame
+     * @return a reference to the frameData of the current frame
+     */
+    FrameData& getCurrentFrame();
 
     /**
      * Cleanup the swapchain

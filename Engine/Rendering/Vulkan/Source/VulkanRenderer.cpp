@@ -21,7 +21,6 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     if (!this->initSwapchain(settings)) return false;
     if (!this->initRenderpass(settings)) return false;
     if (!this->initFramebuffers(settings)) return false;
-    if (!this->initSyncObjects(settings)) return false;
     this->initRender(settings);
 
     return true;
@@ -147,29 +146,73 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
         }
     }
 
-    // Command buffers
+    // Finally, setup frameData
+    return initFrameData(settings, vkbDevice.get_queue_index(vkb::QueueType::graphics).value());
+}
+
+bool VulkanRenderer::initFrameData(EngineSettings& settings, unsigned int graphicsQueueIndex) {
+    frameData.resize(settings.bufferCount);
+
+    for (auto& data : frameData) {
+        if (!initFrameDataGraphicsPools(settings, data, graphicsQueueIndex)) return false;
+
+        if (!initFrameDataSyncObjects(settings, data)) return false;
+    }
+    return true;
+}
+
+bool VulkanRenderer::initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData, unsigned int graphicsQueueIndex) {
+    VkCommandPoolCreateInfo commandPoolCreateInfo = {};
+    commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    commandPoolCreateInfo.pNext = nullptr;
+
+    commandPoolCreateInfo.queueFamilyIndex = graphicsQueueIndex;
+    commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAllocateInfo.pNext = nullptr;
+
+    commandBufferAllocateInfo.commandBufferCount = 1;
+    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+    if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &frameData.commandPool) != VK_SUCCESS) {
+        Logger::error("Failed to create command pool");
+        return false;
+    }
+
+    commandBufferAllocateInfo.commandPool = frameData.commandPool;
+    if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &frameData.commandBuffer) != VK_SUCCESS) {
+        Logger::error("Failed to create command buffer");
+        return false;
+    }
+
+    return true;
+}
+
+bool VulkanRenderer::initFrameDataSyncObjects(EngineSettings& settings, FrameData& frameData) {
+    // Fence
     {
-        VkCommandPoolCreateInfo commandPoolCreateInfo = {};
-        commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        commandPoolCreateInfo.pNext = nullptr;
+        VkFenceCreateInfo fenceCreateInfo = {};
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceCreateInfo.pNext = nullptr;
+        fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        commandPoolCreateInfo.queueFamilyIndex = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
-        commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-        if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &this->graphicsCommandPool) != VK_SUCCESS) {
-            Logger::error("Failed to create command pool");
+        if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &frameData.renderFence) != VK_SUCCESS) {
+            Logger::error("Failed to create fence");
             return false;
         }
-        VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
-        commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        commandBufferAllocateInfo.pNext = nullptr;
+    }
+    // Semaphores
+    {
+        VkSemaphoreCreateInfo semaphoreCreateInfo = {};
+        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        semaphoreCreateInfo.pNext = nullptr;
+        semaphoreCreateInfo.flags = 0;
 
-        commandBufferAllocateInfo.commandPool = this->graphicsCommandPool;
-        commandBufferAllocateInfo.commandBufferCount = 1;
-        commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-        if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &this->commandBuffer) != VK_SUCCESS) {
-            Logger::error("Failed to create command buffer");
+        if (vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &frameData.renderSemaphore) != VK_SUCCESS
+            || vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &frameData.presentSemaphore) != VK_SUCCESS) {
+            Logger::error("Failed to create semaphore");
             return false;
         }
     }
@@ -196,10 +239,17 @@ bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
     vkb::Swapchain vkbSwapchain = vkbSc.value();
 
     this->swapchain = vkbSwapchain.swapchain;
-    this->swapchainImages = vkbSwapchain.get_images().value();
-    this->swapchainImageViews = vkbSwapchain.get_image_views().value();
-
     this->swapchainImageFormat = vkbSwapchain.image_format;
+
+    auto swapchainImages = vkbSwapchain.get_images().value();
+    auto swapchainImageViews = vkbSwapchain.get_image_views().value();
+
+    this->swapchainData.resize(swapchainImages.size());
+    for (int i = 0; i < swapchainImages.size(); ++i) {
+        this->swapchainData[i].swapchainImage = swapchainImages[i];
+        this->swapchainData[i].swapchainImageView = swapchainImageViews[i];
+    }
+
 
     // Depth Buffer
     {
@@ -221,13 +271,10 @@ bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
         allocationCreateInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        vmaCreateImage(this->allocator, &imageCreateInfo, &allocationCreateInfo, &this->depthImage.image, &this->depthImage.allocation, nullptr);
-
         VkImageViewCreateInfo imageViewCreateInfo = {};
         imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         imageViewCreateInfo.pNext = nullptr;
 
-        imageViewCreateInfo.image = this->depthImage.image;
         imageViewCreateInfo.format = this->depthFormat;
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
@@ -236,11 +283,41 @@ bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
         imageViewCreateInfo.subresourceRange.layerCount = 1;
         imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
-        if (vkCreateImageView(this->device, &imageViewCreateInfo, nullptr, &this->depthImageView) != VK_SUCCESS) {
-            Logger::error("Failed to create depth imageview");
+
+        for (SwapchainData& data : this->swapchainData) {
+            vmaCreateImage(this->allocator, &imageCreateInfo, &allocationCreateInfo, &data.depthImage.image,
+                           &data.depthImage.allocation, nullptr);
+
+            imageViewCreateInfo.image = data.depthImage.image;
+            if (vkCreateImageView(this->device, &imageViewCreateInfo, nullptr, &data.depthImageView) != VK_SUCCESS) {
+                Logger::error("Failed to create depth imageview");
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool VulkanRenderer::initFramebuffers(EngineSettings& settings) {
+    VkFramebufferCreateInfo framebufferCreateInfo = {};
+    framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferCreateInfo.pNext = nullptr;
+
+    framebufferCreateInfo.renderPass = this->renderPass;
+    framebufferCreateInfo.attachmentCount = 2;
+    framebufferCreateInfo.width = settings.windowWidth;
+    framebufferCreateInfo.height = settings.windowHeight;
+    framebufferCreateInfo.layers = 1;
+
+    for (SwapchainData& data : this->swapchainData) {
+        VkImageView attachments[2] = {data.swapchainImageView, data.depthImageView};
+        framebufferCreateInfo.pAttachments = attachments;
+        if (vkCreateFramebuffer(this->device, &framebufferCreateInfo, nullptr, &data.framebuffer) != VK_SUCCESS) {
+            Logger::error("Failed to create framebuffer");
             return false;
         }
     }
+
     return true;
 }
 
@@ -342,63 +419,6 @@ bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
     return true;
 }
 
-bool VulkanRenderer::initFramebuffers(EngineSettings& settings) {
-    VkFramebufferCreateInfo framebufferCreateInfo = {};
-    framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferCreateInfo.pNext = nullptr;
-
-    framebufferCreateInfo.renderPass = this->renderPass;
-    framebufferCreateInfo.attachmentCount = 2;
-    framebufferCreateInfo.width = settings.windowWidth;
-    framebufferCreateInfo.height = settings.windowHeight;
-    framebufferCreateInfo.layers = 1;
-
-    const uint32_t swapchainLength = this->swapchainImages.size();
-    this->framebuffers = std::vector<VkFramebuffer>(swapchainLength);
-
-    for (int i = 0; i < swapchainLength; ++i) {
-        VkImageView attachments[2] = {this->swapchainImageViews[i], depthImageView};
-        framebufferCreateInfo.pAttachments = attachments;
-        if (vkCreateFramebuffer(this->device, &framebufferCreateInfo, nullptr, &this->framebuffers[i]) != VK_SUCCESS) {
-            Logger::error("Failed to create framebuffer");
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool VulkanRenderer::initSyncObjects(EngineSettings& settings) {
-    // Fence
-    {
-        VkFenceCreateInfo fenceCreateInfo = {};
-        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceCreateInfo.pNext = nullptr;
-        fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &renderFence) != VK_SUCCESS) {
-            Logger::error("Failed to create fence");
-            return false;
-        }
-    }
-    // Semaphores
-    {
-        VkSemaphoreCreateInfo semaphoreCreateInfo = {};
-        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        semaphoreCreateInfo.pNext = nullptr;
-        semaphoreCreateInfo.flags = 0;
-
-        if (vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &renderSemaphore) != VK_SUCCESS
-            || vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &presentSemaphore) != VK_SUCCESS) {
-            Logger::error("Failed to create semaphore");
-            return false;
-        }
-    }
-    return true;
-}
-
-
-
 bool VulkanRenderer::initRender(EngineSettings& settings) {
     StaticMesh monkey;
     monkey.mesh = new Mesh();
@@ -435,16 +455,15 @@ bool VulkanRenderer::initRender(EngineSettings& settings) {
 void VulkanRenderer::cleanupSwapchain() {
     vkDeviceWaitIdle(this->device);
 
-    vkDestroyImageView(this->device, this->depthImageView, nullptr);
-    vmaDestroyImage(this->allocator, this->depthImage.image, this->depthImage.allocation);
+    for (auto& data : swapchainData) {
+        vkDestroyImageView(this->device, data.depthImageView, nullptr);
+        vmaDestroyImage(this->allocator, data.depthImage.image, data.depthImage.allocation);
+
+        vkDestroyFramebuffer(this->device, data.framebuffer, nullptr);
+        vkDestroyImageView(this->device, data.swapchainImageView, nullptr);
+    }
 
     vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
-
-    for (int i = 0; i < this->swapchainImageViews.size(); ++i) {
-        vkDestroyFramebuffer(this->device, this->framebuffers[i], nullptr);
-
-        vkDestroyImageView(this->device, this->swapchainImageViews[i], nullptr);
-    }
 }
 
 void VulkanRenderer::cleanup() {
@@ -457,20 +476,22 @@ void VulkanRenderer::cleanup() {
     }
     bufferList.clear();
 
-    for (auto& allocatedBuffer: materialList.getMap()) {
-        allocatedBuffer.second.deleteMaterial(device);
+    for (auto& vMat: materialList.getMap()) {
+        vMat.second.deleteMaterial(device);
     }
     bufferList.clear();
 
     deletionQueue.flush(this->device);
 
-    vkDestroyFence(this->device, this->renderFence, nullptr);
-    vkDestroySemaphore(this->device, this->renderSemaphore, nullptr);
-    vkDestroySemaphore(this->device, this->presentSemaphore, nullptr);
-
     vkDestroyRenderPass(this->device, this->renderPass, nullptr);
+    // Cleanup frameData
+    for (FrameData& data : this->frameData) {
+        vkDestroyFence(this->device, data.renderFence, nullptr);
+        vkDestroySemaphore(this->device, data.renderSemaphore, nullptr);
+        vkDestroySemaphore(this->device, data.presentSemaphore, nullptr);
 
-    vkDestroyCommandPool(this->device, this->graphicsCommandPool, nullptr);
+        vkDestroyCommandPool(this->device, data.commandPool, nullptr);
+    }
 
     vmaDestroyAllocator(this->allocator);
 
@@ -484,13 +505,17 @@ void VulkanRenderer::cleanup() {
 }
 
 void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
-    vkWaitForFences(this->device, 1, &renderFence, true, UINT64_MAX);
-    vkResetFences(this->device, 1, &renderFence);
+    FrameData& frame = getCurrentFrame();
+
+    vkWaitForFences(this->device, 1, &frame.renderFence, true, UINT64_MAX);
+    vkResetFences(this->device, 1, &frame.renderFence);
 
     uint32_t swapchainIndex;
-    vkAcquireNextImageKHR(this->device, this->swapchain, UINT64_MAX, this->presentSemaphore, VK_NULL_HANDLE, &swapchainIndex);
+    vkAcquireNextImageKHR(this->device, this->swapchain, UINT64_MAX, frame.presentSemaphore, VK_NULL_HANDLE, &swapchainIndex);
 
-    vkResetCommandBuffer(commandBuffer, 0);
+    SwapchainData swapchain = swapchainData[swapchainIndex];
+
+    vkResetCommandBuffer(frame.commandBuffer, 0);
 
     VkCommandBufferBeginInfo commandBufferBeginInfo = {};
     commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -498,7 +523,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     commandBufferBeginInfo.pInheritanceInfo = nullptr;
 
     commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(this->commandBuffer, &commandBufferBeginInfo);
+    vkBeginCommandBuffer(frame.commandBuffer, &commandBufferBeginInfo);
 
     VkClearValue clearValues[2];
     float flash = (float) std::abs(std::sin(gameTime));
@@ -506,8 +531,6 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
 
     clearValues[1].depthStencil.depth = 1.f;
     clearValues[1].depthStencil.stencil = 0;
-
-
 
     VkRenderPassBeginInfo renderPassBeginInfo = {};
     renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -517,14 +540,14 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
     renderPassBeginInfo.renderArea.extent = {1366, 768};
-    renderPassBeginInfo.framebuffer = this->framebuffers[swapchainIndex];
+    renderPassBeginInfo.framebuffer = swapchain.framebuffer;
 
     renderPassBeginInfo.clearValueCount = 2;
     renderPassBeginInfo.pClearValues = clearValues;
 
     // Renderpass
     {
-        vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         glm::vec3 camPos = {0.f, 0.f, -2};
         glm::mat4 view = glm::translate(glm::mat4(1.f), camPos);
@@ -533,28 +556,28 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
 
         for (auto& mesh : renderables) {
             VMaterial vMat = materialList.get(mesh.material->materialId);
-            vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+            vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
 
-            AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesIndex);
-            AllocatedBuffer indBuffer = this->bufferList.get(mesh.mesh->indicesIndex);
+            AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesId);
+            AllocatedBuffer indBuffer = this->bufferList.get(mesh.mesh->indicesId);
 
             VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
-            vkCmdBindIndexBuffer(this->commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+            vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
 
             glm::mat4 model = glm::rotate(glm::mat4{1.f}, glm::radians((float) gameTime * 100 * multiplier), glm::vec3(0, 1, 0));
             multiplier *= -1;
             glm::mat4 renderMatrix = proj * view * model;
 
             MeshPushConstants pushConstants = {renderMatrix};
-            vkCmdPushConstants(this->commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+            vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-            vkCmdDrawIndexed(this->commandBuffer, mesh.mesh->indices.size(), 1, 0, 0, 0);
+            vkCmdDrawIndexed(frame.commandBuffer, mesh.mesh->indices.size(), 1, 0, 0, 0);
         }
 
-        vkCmdEndRenderPass(this->commandBuffer);
+        vkCmdEndRenderPass(frame.commandBuffer);
     }
-    vkEndCommandBuffer(this->commandBuffer);
+    vkEndCommandBuffer(frame.commandBuffer);
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -565,15 +588,15 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     submitInfo.pWaitDstStageMask = &waitStage;
 
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &this->presentSemaphore;
+    submitInfo.pWaitSemaphores = &frame.presentSemaphore;
 
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &this->renderSemaphore;
+    submitInfo.pSignalSemaphores = &frame.renderSemaphore;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &this->commandBuffer;
+    submitInfo.pCommandBuffers = &frame.commandBuffer;
 
-    vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, this->renderFence);
+    vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, frame.renderFence);
 
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -582,12 +605,13 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
     presentInfo.pSwapchains = &this->swapchain;
     presentInfo.swapchainCount = 1;
 
-    presentInfo.pWaitSemaphores = &this->renderSemaphore;
+    presentInfo.pWaitSemaphores = &frame.renderSemaphore;
     presentInfo.waitSemaphoreCount = 1;
 
     presentInfo.pImageIndices = &swapchainIndex;
 
     vkQueuePresentKHR(this->graphicsQueue, &presentInfo);
+    ++currentFrame;
 }
 
 bool VulkanRenderer::loadShader(const std::string& path, VkShaderModule* outShaderModule) {
@@ -636,7 +660,7 @@ bool VulkanRenderer::uploadMesh(Mesh& mesh) {
         return false;
     }
 
-    mesh.verticesIndex = this->bufferList.insert(allocatedBuffer);
+    mesh.verticesId = this->bufferList.insert(allocatedBuffer);
 
     void* data;
     vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
@@ -653,7 +677,7 @@ bool VulkanRenderer::uploadMesh(Mesh& mesh) {
         return false;
     }
 
-    mesh.indicesIndex = this->bufferList.insert(allocatedBuffer);
+    mesh.indicesId = this->bufferList.insert(allocatedBuffer);
     vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
     memcpy(data, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
     vmaUnmapMemory(this->allocator, allocatedBuffer.allocation);
@@ -725,3 +749,6 @@ bool VulkanRenderer::createMaterial(Material& material) {
     return true;
 }
 
+FrameData& VulkanRenderer::getCurrentFrame() {
+    return frameData[currentFrame % settings->bufferCount];
+}

@@ -9,6 +9,8 @@ protected:
     Renderer* renderer = nullptr;
     double lastFrameTime = 0, frameDelta = 0;
 public:
+    EngineSettings settings;
+
     virtual int initialise();
 
     virtual int startLoop();

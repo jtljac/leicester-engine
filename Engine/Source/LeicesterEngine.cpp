@@ -7,10 +7,8 @@ int LeicesterEngine::initialise() {
     // Initialise GLFW
     if (!glfwInit()) return -1;
 
-    EngineSettings settings;
-
     // Initialise Renderer
-    if (!renderer->initialise(settings)) {
+    if (!renderer->initialise(this->settings)) {
         glfwTerminate();
         return -1;
     }
