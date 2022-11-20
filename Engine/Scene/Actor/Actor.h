@@ -3,26 +3,30 @@
 //
 
 #pragma once
-#include "glm/vec3.hpp"
-#include "glm/gtc/quaternion.hpp"
+#include <glm/vec3.hpp>
+#include <glm/gtc/quaternion.hpp>
 
-#include <Mesh/Mesh.h>
+#include <Mesh/StaticMesh.h>
 #include <Collision/Collider.h>
+#include "Engine/LObject.h"
 
-struct Actor {
+struct Actor : public LObject{
     // Appearance and collision
-    Mesh* actorMesh = nullptr;
+    StaticMesh* actorMesh = nullptr;
     Collider* actorCollider = nullptr;
 
     // Position, rotation, scale
-    glm::vec3 position, scale;
-    glm::quat rotation;
+    glm::vec3 position{0, 0, 0};
+    glm::vec3 scale{1, 1, 1};
+    glm::quat rotation = glm::quat({0, 0, 0});
 
-    void onCreate();
-    void tick(float delta);
-    void onDestroy();
+    Actor(StaticMesh* mesh, Collider* collider);
+
+    void onCreate() override;
+    void tick(double deltaTime) override;
+    void onDestroy() override;
 
     // Utils
-    bool hasCollision();
-    bool hasMesh();
+    bool hasCollision() const;
+    bool hasMesh() const;
 };

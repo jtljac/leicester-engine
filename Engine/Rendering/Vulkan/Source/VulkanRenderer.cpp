@@ -22,9 +22,23 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     if (!this->initSwapchain(settings)) return false;
     if (!this->initRenderpass(settings)) return false;
     if (!this->initFramebuffers(settings)) return false;
-    this->initRender(settings);
 
     return true;
+}
+
+void VulkanRenderer::setupScene(Scene& scene) {
+    for (const Actor& actor : scene.actors) {
+        if (actor.hasMesh()) {
+            // Upload mesh
+            if (actor.actorMesh->mesh->verticesId == 0) {
+                uploadMesh(*actor.actorMesh->mesh);
+            }
+            // Upload Material
+            if (actor.actorMesh->material->materialId == 0) {
+                createMaterial(*actor.actorMesh->material);
+            }
+        }
+    }
 }
 
 VulkanRenderer::~VulkanRenderer() = default;
@@ -483,39 +497,6 @@ bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
     return true;
 }
 
-bool VulkanRenderer::initRender(EngineSettings& settings) {
-    StaticMesh monkey;
-    monkey.mesh = new Mesh();
-    monkey.mesh->loadMeshFromFile(FileUtils::getAssetsPath() + "/Monkey.lmesh");
-    monkey.material = new Material("/meshtriangle.vert.spv", "/colourtriangle.frag.spv");
-
-    this->uploadMesh(*monkey.mesh);
-    this->createMaterial(*monkey.material);
-
-    this->renderables.push_back(monkey);
-
-    StaticMesh triangle;
-    triangle.mesh = new Mesh;
-    triangle.mesh->vertices.resize(3);
-    triangle.mesh->vertices[0].position = {0.5f, 0.5f, 0.f};
-    triangle.mesh->vertices[1].position = {-0.5f, 0.5f, 0.f};
-    triangle.mesh->vertices[2].position = {0.f, -0.5f, 0.f};
-
-    triangle.mesh->vertices[0].colour = {1.f, 0.f, 0.f};
-    triangle.mesh->vertices[1].colour = {0.f, 1.f, 0.f};
-    triangle.mesh->vertices[2].colour = {0.f, 0.f, 1.f};
-
-    triangle.mesh->indices = {0, 1, 2};
-
-    triangle.material = new Material("/meshtriangle.vert.spv", "/colourtriangle.frag.spv");
-    this->uploadMesh(*triangle.mesh);
-    this->createMaterial(*triangle.material);
-
-    this->renderables.push_back(triangle);
-
-    return true;
-}
-
 void VulkanRenderer::cleanupSwapchain() {
     vkDeviceWaitIdle(this->device);
 
@@ -574,7 +555,7 @@ void VulkanRenderer::cleanup() {
     Renderer::cleanup();
 }
 
-void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
+void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, const Scene& scene) {
     FrameData& frame = getCurrentFrame();
 
     vkWaitForFences(this->device, 1, &frame.renderFence, true, UINT64_MAX);
@@ -630,10 +611,10 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
         memcpy(data, &cameraData, sizeof(GpuCameraStruct));
         vmaUnmapMemory(this->allocator, frame.cameraBuffer.allocation);
 
-        int multiplier = 1;
-
         uint64_t prevVMat = 0;
-        for (auto& mesh : renderables) {
+        for (const Actor& actor : scene.actors) {
+            if (!actor.hasMesh()) continue;
+            StaticMesh& mesh = *actor.actorMesh;
             VMaterial vMat = materialList.get(mesh.material->materialId);
             if (prevVMat != mesh.material->materialId) {
                 prevVMat = mesh.material->materialId;
@@ -649,8 +630,9 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime) {
             vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
             vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
 
-            glm::mat4 model = glm::rotate(glm::mat4{1.f}, glm::radians((float) gameTime * 100 * multiplier), glm::vec3(0, 1, 0));
-            multiplier *= -1;
+            glm::mat4 model = glm::translate(glm::mat4(1.f), actor.position);
+            model = glm::scale(model, actor.scale);
+            model = model * glm::mat4_cast(actor.rotation);
 
             MeshPushConstants pushConstants = {model};
             vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);

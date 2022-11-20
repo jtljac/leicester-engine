@@ -16,6 +16,10 @@ int LeicesterEngine::initialise() {
     return 0;
 }
 
+Renderer* LeicesterEngine::getRenderer() const {
+    return renderer;
+}
+
 void LeicesterEngine::setRenderer(Renderer* pRenderer) {
     this->renderer = pRenderer;
 }
@@ -32,17 +36,27 @@ int LeicesterEngine::startLoop() {
         }
     });
 
+    currentScene->onCreate();
+    renderer->setupScene(*currentScene);
+
     // Main Loop
     while(!renderer->wantsToClose()) {
         // Get frame delta
         currentFrameTime = glfwGetTime();
         this->frameDelta = currentFrameTime - lastFrameTime;
         lastFrameTime = currentFrameTime;
-        // Render Frame
-        renderer->drawFrame(this->frameDelta, currentFrameTime);
+
         // Handle Events
         glfwPollEvents();
+
+        // Call Ticks
+        currentScene->tick(this->frameDelta);
+
+        // Render Frame
+        renderer->drawFrame(this->frameDelta, currentFrameTime, *currentScene);
     }
+
+    currentScene->onDestroy();
 
     return 0;
 }

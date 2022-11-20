@@ -14,6 +14,7 @@
 #include <Utils/EngineSettings.h>
 
 #include <vector>
+#include "Scene/Scene.h"
 
 class Renderer {
 protected:
@@ -43,10 +44,17 @@ public:
     virtual bool initialise(EngineSettings& settings);
 
     /**
+     * Initialise the shader pipeline
+     * @param settings the engine settings
+     * @return True if successful
+     */
+     virtual void setupScene(Scene& scene) = 0;
+
+    /**
      * Draw a frame
      * @param deltaTime The length of the last frame in seconds
      */
-    virtual void drawFrame(double deltaTime, double gameTime) = 0;
+    virtual void drawFrame(double deltaTime, double gameTime, const Scene& scene) = 0;
 
     /**
      * Cleanup the renderer so it's ready for destruction

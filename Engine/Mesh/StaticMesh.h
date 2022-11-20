@@ -13,5 +13,6 @@
 struct StaticMesh {
     Mesh* mesh;
     Material* material;
-    glm::mat4 transform;
+
+    StaticMesh(Mesh* mesh, Material* material);
 };

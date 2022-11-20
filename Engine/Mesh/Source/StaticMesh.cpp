@@ -3,3 +3,5 @@
 //
 
 #include "Mesh/StaticMesh.h"
+
+StaticMesh::StaticMesh(Mesh* mesh, Material* material) : mesh(mesh), material(material) {}

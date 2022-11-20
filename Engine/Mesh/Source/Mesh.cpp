@@ -37,3 +37,5 @@ bool Mesh::loadMeshFromFile(const std::string& filePath) {
     file.close();
     return true;
 }
+
+Mesh::Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices) : vertices(vertices), indices(indices) {}

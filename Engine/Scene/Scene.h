@@ -8,6 +8,12 @@
 
 #include "Actor/Actor.h"
 
-struct Scene {
+struct Scene : public LObject {
     std::vector<Actor> actors;
+
+    void onCreate() override;
+
+    void tick(double deltaTime) override;
+
+    void onDestroy() override;
 };

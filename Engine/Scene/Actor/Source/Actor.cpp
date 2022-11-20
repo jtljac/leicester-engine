@@ -4,6 +4,9 @@
 
 #include "Scene/Actor/Actor.h"
 
+Actor::Actor(StaticMesh* mesh, Collider* collider) : actorMesh(mesh), actorCollider(collider) {
+
+}
 
 
 void Actor::onCreate() {
@@ -11,8 +14,8 @@ void Actor::onCreate() {
 }
 
 
-void Actor::tick(float delta) {
-
+void Actor::tick(double deltaTime) {
+    rotation = normalize(rotation * glm::quat({0, deltaTime, 0}));
 }
 
 void Actor::onDestroy() {
@@ -20,11 +23,11 @@ void Actor::onDestroy() {
 }
 
 
-bool Actor::hasCollision() {
+bool Actor::hasCollision() const {
     return this->actorCollider != nullptr;
 }
 
 
-bool Actor::hasMesh() {
+bool Actor::hasMesh() const {
     return this->actorMesh != nullptr;
 }

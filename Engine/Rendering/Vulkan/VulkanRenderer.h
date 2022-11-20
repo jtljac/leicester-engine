@@ -22,6 +22,7 @@
 #include "VMaterial.h"
 #include "Mesh/StaticMesh.h"
 #include "FrameData.h"
+#include "Scene/Scene.h"
 
 class VulkanRenderer : public Renderer {
     // Vulkan Handles
@@ -61,8 +62,6 @@ class VulkanRenderer : public Renderer {
     // GPU Memory Trackers
     IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;    // Stores Allocated Buffers against an ID
     IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
-
-    std::vector<StaticMesh> renderables;
 
 protected:
     /**
@@ -167,13 +166,6 @@ private:
      */
     bool initRenderpass(EngineSettings& settings);
 
-    /**
-     * Initialise the shader pipeline
-     * @param settings the engine settings
-     * @return True if successful
-     */
-    bool initRender(EngineSettings& settings);
-
     // Resource Handling
     /**
      * Load the shader at the given path
@@ -227,7 +219,8 @@ public:
 
     // Overrides
     bool initialise(EngineSettings& settings) override;
-    void drawFrame(double deltaTime, double gameTime) override;
+    void setupScene(Scene& scene) override;
+    void drawFrame(double deltaTime, double gameTime, const Scene& scene) override;
     void cleanup() override;
 };
 
