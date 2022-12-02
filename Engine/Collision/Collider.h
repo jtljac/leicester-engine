@@ -4,7 +4,8 @@
 
 #pragma once
 
+#include <glm/vec3.hpp>
 
-class Collider {
-
+struct Collider {
+    glm::vec3 getBoundingBox();
 };

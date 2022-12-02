@@ -10,23 +10,28 @@
 #include <Collision/Collider.h>
 #include "Engine/LObject.h"
 
-struct Actor : public LObject{
+struct Actor : public LObject {
     // Appearance and collision
-    StaticMesh* actorMesh = nullptr;
-    Collider* actorCollider = nullptr;
+    StaticMesh *actorMesh = nullptr;
+    Collider *actorCollider = nullptr;
 
     // Position, rotation, scale
     glm::vec3 position{0, 0, 0};
     glm::vec3 scale{1, 1, 1};
     glm::quat rotation = glm::quat({0, 0, 0});
 
-    Actor(StaticMesh* mesh, Collider* collider);
+    Actor(StaticMesh *mesh, Collider *collider);
 
     void onCreate() override;
+
     void tick(double deltaTime) override;
+
     void onDestroy() override;
 
     // Utils
     bool hasCollision() const;
+
     bool hasMesh() const;
+
+    glm::vec3 getBoundingBox() const;
 };

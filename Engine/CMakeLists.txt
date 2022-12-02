@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 add_subdirectory(Utils)
+add_subdirectory(Engine)
 add_subdirectory(Platform)
 add_subdirectory(Material)
 add_subdirectory(Mesh)

@@ -31,3 +31,9 @@ bool Actor::hasCollision() const {
 bool Actor::hasMesh() const {
     return this->actorMesh != nullptr;
 }
+
+glm::vec3 Actor::getBoundingBox() const {
+    if (hasCollision()) return glm::vec3(0);
+
+    return actorCollider->getBoundingBox();
+}
