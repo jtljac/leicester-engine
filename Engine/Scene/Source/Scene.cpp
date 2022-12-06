@@ -11,6 +11,11 @@ void Scene::onCreate() {
 }
 
 void Scene::tick(double deltaTime) {
+    octree->clearTree();
+    for (auto& actor: actors) {
+        octree->insertNode(&actor);
+    }
+
     for (auto& actor : actors) {
         actor.tick(deltaTime);
     }

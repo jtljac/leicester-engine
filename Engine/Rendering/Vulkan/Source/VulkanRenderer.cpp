@@ -600,7 +600,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     {
         vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        glm::vec3 camPos = {0.f, 0.f, -2};
+        glm::vec3 camPos = {0.f, 0.f, -5};
         GpuCameraStruct cameraData = {
                 glm::translate(glm::mat4(1.f), camPos),
                 glm::perspective(glm::radians(90.f), 1366.f/768.f, 0.1f, 200.f)

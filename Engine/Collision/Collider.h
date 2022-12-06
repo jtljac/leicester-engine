@@ -7,5 +7,5 @@
 #include <glm/vec3.hpp>
 
 struct Collider {
-    glm::vec3 getBoundingBox();
+    virtual glm::vec3 getBoundingBox() = 0;
 };

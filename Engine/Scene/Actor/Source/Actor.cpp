@@ -9,6 +9,7 @@ Actor::Actor(StaticMesh* mesh, Collider* collider) : actorMesh(mesh), actorColli
 }
 
 
+
 void Actor::onCreate() {
 
 }
@@ -33,7 +34,7 @@ bool Actor::hasMesh() const {
 }
 
 glm::vec3 Actor::getBoundingBox() const {
-    if (hasCollision()) return glm::vec3(0);
+    if (!hasCollision()) return glm::vec3(0);
 
     return actorCollider->getBoundingBox();
 }

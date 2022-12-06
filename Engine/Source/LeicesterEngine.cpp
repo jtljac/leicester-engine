@@ -2,6 +2,7 @@
 // Created by jacob on 11/10/22.
 //
 #include "../LeicesterEngine.h"
+#include "Utils/Logger.h"
 
 int LeicesterEngine::initialise() {
     // Initialise GLFW

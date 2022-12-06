@@ -9,11 +9,14 @@
 #include <Mesh/StaticMesh.h>
 #include <Collision/Collider.h>
 #include "Engine/LObject.h"
+#include "Scene/Scene.h"
 
 struct Actor : public LObject {
     // Appearance and collision
     StaticMesh *actorMesh = nullptr;
     Collider *actorCollider = nullptr;
+
+    Scene* scene = nullptr;
 
     // Position, rotation, scale
     glm::vec3 position{0, 0, 0};
@@ -21,6 +24,14 @@ struct Actor : public LObject {
     glm::quat rotation = glm::quat({0, 0, 0});
 
     Actor(StaticMesh *mesh, Collider *collider);
+    Actor(const Actor& otherActor) {
+        actorMesh = otherActor.actorMesh;
+        actorCollider = otherActor.actorCollider;
+
+        position = glm::vec3(otherActor.position);
+        scale = glm::vec3(otherActor.scale);
+        rotation = glm::quat(otherActor.rotation);
+    }
 
     void onCreate() override;
 

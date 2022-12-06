@@ -4,4 +4,8 @@
 
 #include "Collision/AABBCollider.h"
 
-AABBCollider::AABBCollider(float width, float height) : width(width), height(height) {}
+AABBCollider::AABBCollider(float width, float height, float depth) : width(width), height(height), depth(depth) {}
+
+glm::vec3 AABBCollider::getBoundingBox() {
+    return glm::vec3(width, height, depth);
+}

@@ -5,6 +5,7 @@
 #pragma once
 #include <vector>
 #include <glm/glm.hpp>
+#include <algorithm>
 #include "Scene/Actor/Actor.h"
 
 class Octree {
@@ -30,29 +31,27 @@ protected:
      * @param actor
      * @return the index of the octant if the actor's bounding box is contained wholly in
      */
-    int getActorOctant(Actor* actor) {
-        glm::vec3 actorPosition = position - actor->position;
+    int getBoundingBoxOctant(glm::vec3 bbPosition, glm::vec3 bbSize);
 
-        // Half bb so it can be conveniently added to positions
-        glm::vec3 actorBB = actor->getBoundingBox() * .5f;
-        int index = 0;
-        if ((actorPosition.x - actorBB.x) < 0) {
-            if (actorPosition.x + actorBB.x > 0) return -1;
-            index += 1;
-        }
+    /**
+     * Get all the quadrants overlapped by the bounding box
+     * @param bbPosition the position of the bounding box
+     * @param bbSize the dimensions of the bounding box
+     * @param outOctants The vector the octants will be added to
+     */
+    void getAllOverlappedOctants(glm::vec3 bbPosition, glm::vec3 bbSize, std::vector<Octree*>& outOctants);
 
-        if ((actorPosition.y - actorBB.y) < 0) {
-            if (actorPosition.y + actorBB.y > 0) return -1;
-            index += 2;
-        }
+    /**
+     * Get the octant the given point is withing
+     * @param point The point to check
+     * @return the index of the octant the point is within
+     */
+    int getPointOctant(glm::vec3 point);
 
-        if ((actorPosition.z - actorBB.z) < 0) {
-            if (actorPosition.z + actorBB.z > 0) return -1;
-            index += 4;
-        }
-
-        return index;
-    }
+    /**
+     * Create the octants and spill each actor into their relevant ones
+     */
+    void spill();
 
 public:
 
@@ -63,35 +62,43 @@ public:
         }
     }
 
-    void spill() {
-        glm::vec3 newDimensions = dimensions * .5f;
-        subTrees.push_back(new Octree(newDimensions, position + glm::vec3( newDimensions.x, -newDimensions.y,  newDimensions.z), depth + 1));
-        subTrees.push_back(new Octree(newDimensions, position + glm::vec3(-newDimensions.x, -newDimensions.y,  newDimensions.z), depth + 1));
-        subTrees.push_back(new Octree(newDimensions, position + glm::vec3( newDimensions.x,  newDimensions.y,  newDimensions.z), depth + 1));
-        subTrees.push_back(new Octree(newDimensions, position + glm::vec3(-newDimensions.x,  newDimensions.y,  newDimensions.z), depth + 1));
-        subTrees.push_back(new Octree(newDimensions, position + glm::vec3( newDimensions.x, -newDimensions.y, -newDimensions.z), depth + 1));
-        subTrees.push_back(new Octree(newDimensions, position + glm::vec3(-newDimensions.x, -newDimensions.y, -newDimensions.z), depth + 1));
-        subTrees.push_back(new Octree(newDimensions, position + glm::vec3( newDimensions.x,  newDimensions.y, -newDimensions.z), depth + 1));
-        subTrees.push_back(new Octree(newDimensions, position + glm::vec3(-newDimensions.x,  newDimensions.y, -newDimensions.z), depth + 1));
+    /**
+     * Insert an actor into the octree
+     * @param actor The actor to insert
+     */
+    void insertNode(Actor* actor);
 
-        std::vector<Actor*> temp(this->entities);
-        entities.clear();
-        for (Actor* actor : temp) {
-            insertNode(actor);
-        }
-    }
+    /**
+     * Get all the actors close to the given actor
+     * @param actor The actor being checked for
+     * @param outVector The vector that the close actors will be added to
+     */
+    void getCloseActors(Actor* actor, std::vector<Actor*>& outVector);
 
-    void insertNode(Actor* actor) {
-        if (subTrees.empty()) {
-            entities.push_back(actor);
-            if (subTrees.size() == 8 && this->depth != this->MAX_DEPTH) spill();
-        } else {
-            int quadrantIndex = getActorOctant(actor);
-            if (quadrantIndex < 0) {
-                entities.push_back(actor);
-            } else {
-                subTrees[quadrantIndex]->insertNode(actor);
-            }
-        }
-    }
+    /**
+     * Get all the actors in the octree
+     * @param outVector
+     */
+    void getAllActors(std::vector<Actor*>& outVector);
+
+    /**
+     * Remove the given actor from the octree
+     * This operation parses the whole octree and thus can be expensive
+     * @param actor The actor to remove
+     * @return true if the actor was removed
+     */
+    bool removeActor(Actor* actor);
+
+    /**
+     * Remove the given actor from the octree, giving it's location as of when it was inserted in the tree
+     * @param actor The actor to remove
+     * @param positionHint The position of the actor when it was inserted
+     * @return true if the actor was removed
+     */
+    bool removeActor(Actor* actor, glm::vec3 positionHint);
+
+    /**
+     * Remove all actors and subtrees from this Octree
+     */
+    void clearTree();
 };
