@@ -3,26 +3,35 @@
 //
 
 #include "Scene/Scene.h"
+#include "../Actor/Actor.h"
 
 void Scene::onCreate() {
-    for (auto& actor : actors) {
-        actor.onCreate();
+    for (Actor* actor : actors) {
+        actor->onCreate();
     }
 }
 
 void Scene::tick(double deltaTime) {
     octree->clearTree();
-    for (auto& actor: actors) {
-        octree->insertNode(&actor);
+    for (Actor* actor: actors) {
+        octree->insertNode(actor);
     }
 
     for (auto& actor : actors) {
-        actor.tick(deltaTime);
+        actor->tick(deltaTime);
     }
 }
 
 void Scene::onDestroy() {
     for (auto& actor : actors) {
-        actor.onDestroy();
+        actor->onDestroy();
     }
 }
+
+void Scene::addActorToScene(Actor* actor) {
+    this->actors.push_back(actor);
+    this->octree->insertNode(actor);
+    actor->scene = this;
+    actor->onCreate();
+}
+

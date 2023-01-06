@@ -2,13 +2,12 @@
 // Created by jacob on 13/10/22.
 //
 
-#include "Scene/Actor/Actor.h"
+#include <Scene/Actor/Actor.h>
+#include <Scene/Scene.h>
 
 Actor::Actor(StaticMesh* mesh, Collider* collider) : actorMesh(mesh), actorCollider(collider) {
 
 }
-
-
 
 void Actor::onCreate() {
 
@@ -33,8 +32,8 @@ bool Actor::hasMesh() const {
     return this->actorMesh != nullptr;
 }
 
-glm::vec3 Actor::getBoundingBox() const {
-    if (!hasCollision()) return glm::vec3(0);
+BoundingBox Actor::getBoundingBox() const {
+    if (!hasCollision()) return {glm::vec3(0), glm::vec3(0)};
 
     return actorCollider->getBoundingBox();
 }

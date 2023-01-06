@@ -31,7 +31,7 @@ protected:
      * @param actor
      * @return the index of the octant if the actor's bounding box is contained wholly in
      */
-    int getBoundingBoxOctant(glm::vec3 bbPosition, glm::vec3 bbSize);
+    int getBoundingBoxOctant(glm::vec3 bbPosition, const BoundingBox& bb);
 
     /**
      * Get all the quadrants overlapped by the bounding box
@@ -39,7 +39,7 @@ protected:
      * @param bbSize the dimensions of the bounding box
      * @param outOctants The vector the octants will be added to
      */
-    void getAllOverlappedOctants(glm::vec3 bbPosition, glm::vec3 bbSize, std::vector<Octree*>& outOctants);
+    void getAllOverlappedOctants(glm::vec3 bbPosition, const BoundingBox& bb, std::vector<Octree*>& outOctants);
 
     /**
      * Get the octant the given point is withing

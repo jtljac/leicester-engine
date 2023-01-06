@@ -8,10 +8,12 @@
 #include "Collider.h"
 
 struct AABBCollider : public Collider {
-    float width, height, depth;
+    BoundingBox boundingBox;
 
 public:
-    AABBCollider(float width, float height, float depth);
+    AABBCollider(const BoundingBox& boundingBox);
 
-    glm::vec3 getBoundingBox() override;
+    BoundingBox getBoundingBox() override;
+
+    [[nodiscard]] glm::vec3 findFurthestPointInDirection(glm::vec3 direction) const override;
 };

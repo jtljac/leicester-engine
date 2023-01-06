@@ -4,68 +4,63 @@
 
 #include "Engine/Octree.h"
 
-int Octree::getBoundingBoxOctant(glm::vec3 bbPosition, glm::vec3 bbSize) {
+int Octree::getBoundingBoxOctant(glm::vec3 bbPosition, const BoundingBox& bb) {
     glm::vec3 position = this->position - bbPosition;
 
-    // Half bb so it can be conveniently added to positions
-    glm::vec3 actorBB = bbSize * .5f;
     int index = 0;
-    if ((position.x - actorBB.x) < 0) {
-        if (position.x + actorBB.x >= 0) return -1;
+    if ((position.x + bb.min.x) < 0) {
+        if (position.x + bb.max.x >= 0) return -1;
         index += 1;
     }
 
-    if ((position.y - actorBB.y) < 0) {
-        if (position.y + actorBB.y >= 0) return -1;
+    if ((position.y + bb.min.y) < 0) {
+        if (position.y + bb.max.y >= 0) return -1;
         index += 2;
     }
 
-    if ((position.z - actorBB.z) < 0) {
-        if (position.z + actorBB.z >= 0) return -1;
+    if ((position.z + bb.min.z) < 0) {
+        if (position.z + bb.max.z >= 0) return -1;
         index += 4;
     }
 
     return index;
 }
 
-void Octree::getAllOverlappedOctants(glm::vec3 bbPosition, glm::vec3 bbSize, std::vector<Octree*>& outOctants) {
+void Octree::getAllOverlappedOctants(glm::vec3 bbPosition, const BoundingBox& bb, std::vector<Octree*>& outOctants) {
     glm::vec3 position = this->position - bbPosition;
 
-    // Half bb so it can be conveniently added to positions
-    glm::vec3 actorBB = bbSize * .5f;
-
-    if ((position.x + actorBB.x) < 0) {
-        if ((position.y + actorBB.y) < 0) {
-            if ((position.z + actorBB.z) < 0) {
+    if ((position.x + bb.max.x) < 0) {
+        if ((position.y + bb.max.y) < 0) {
+            if ((position.z + bb.max.z) < 0) {
                 outOctants.push_back(subTrees[BOTTOMFRONTRIGHTINDEX]);
             }
-            if (position.z - actorBB.z >= 0) {
+            if (position.z + bb.min.z >= 0) {
                 outOctants.push_back(subTrees[BOTTOMBACKRIGHTINDEX]);
             }
         }
-        if (position.y - actorBB.y >= 0) {
-            if ((position.z + actorBB.z) < 0) {
+        if (position.y + bb.min.y >= 0) {
+            if ((position.z + bb.max.z) < 0) {
                 outOctants.push_back(subTrees[TOPFRONTRIGHTINDEX]);
             }
-            if (position.z - actorBB.z >= 0) {
+            if (position.z + bb.min.z >= 0) {
                 outOctants.push_back(subTrees[TOPBACKRIGHTINDEX]);
             }
         }
     }
-    if (position.x - actorBB.x >= 0) {
-        if ((position.y + actorBB.y) < 0) {
-            if ((position.z + actorBB.z) < 0) {
+    if (position.x + bb.min.x >= 0) {
+        if ((position.y + bb.max.y) < 0) {
+            if ((position.z + bb.max.z) < 0) {
                 outOctants.push_back(subTrees[BOTTOMFRONTLEFINDEX]);
             }
-            if (position.z - actorBB.z >= 0) {
+            if (position.z + bb.min.z >= 0) {
                 outOctants.push_back(subTrees[BOTTOMBACKLEFTINDEX]);
             }
         }
-        if (position.y - actorBB.y >= 0) {
-            if ((position.z + actorBB.z) < 0) {
+        if (position.y + bb.min.y >= 0) {
+            if ((position.z + bb.max.z) < 0) {
                 outOctants.push_back(subTrees[TOPFRONTLEFINDEX]);
             }
-            if (position.z - actorBB.z >= 0) {
+            if (position.z + bb.min.z >= 0) {
                 outOctants.push_back(subTrees[TOPBACKLEFTINDEX]);
             }
         }

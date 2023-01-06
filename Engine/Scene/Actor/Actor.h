@@ -9,7 +9,8 @@
 #include <Mesh/StaticMesh.h>
 #include <Collision/Collider.h>
 #include "Engine/LObject.h"
-#include "Scene/Scene.h"
+
+struct Scene;
 
 struct Actor : public LObject {
     // Appearance and collision
@@ -44,5 +45,5 @@ struct Actor : public LObject {
 
     bool hasMesh() const;
 
-    glm::vec3 getBoundingBox() const;
+    BoundingBox getBoundingBox() const;
 };
