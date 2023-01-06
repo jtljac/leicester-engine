@@ -8,8 +8,6 @@
 #include "Mesh.h"
 #include "Material/Material.h"
 
-#include <glm/mat4x4.hpp>
-
 struct StaticMesh {
     Mesh* mesh;
     Material* material;

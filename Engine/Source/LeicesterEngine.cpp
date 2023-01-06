@@ -14,6 +14,9 @@ int LeicesterEngine::initialise() {
         return -1;
     }
 
+    // Register built in assets
+
+
     return 0;
 }
 
@@ -52,6 +55,21 @@ int LeicesterEngine::startLoop() {
 
         // Call Ticks
         currentScene->tick(this->frameDelta);
+
+        // Check for collision
+        for (const auto& actor : currentScene->actors) {
+            if (!actor->hasCollision()) continue;
+            std::vector<Actor*> potentialCollisions;
+            if (!collisionEngine->getNearbyColliders(actor, potentialCollisions)) continue;
+
+            bool anyCollisions = false;
+            for (const auto& otherActor: potentialCollisions) {
+                CollisionResult result = collisionEngine->testCollision(actor, otherActor);
+                anyCollisions |= result.collided;
+            }
+
+            actor->actorCollider->isColliding = anyCollisions;
+        }
 
         // Render Frame
         renderer->drawFrame(this->frameDelta, currentFrameTime, *currentScene);

@@ -14,6 +14,7 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #include "Rendering/GPUStructures/GpuCameraStruct.h"
+#include <Collision/SphereCollider.h>
 
 bool VulkanRenderer::initialise(EngineSettings& settings) {
     Renderer::initialise(settings);
@@ -23,19 +24,24 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     if (!this->initRenderpass(settings)) return false;
     if (!this->initFramebuffers(settings)) return false;
 
+    // Initialise collision visualisation
+    createMaterial(this->collisionMat);
+
+    uploadMesh(*SphereCollider::sphereRenderMesh);
+
     return true;
 }
 
 void VulkanRenderer::setupScene(Scene& scene) {
-    for (const Actor& actor : scene.actors) {
-        if (actor.hasMesh()) {
+    for (const Actor* actor : scene.actors) {
+        if (actor->hasMesh()) {
             // Upload mesh
-            if (actor.actorMesh->mesh->verticesId == 0) {
-                uploadMesh(*actor.actorMesh->mesh);
+            if (actor->actorMesh->mesh->verticesId == 0) {
+                uploadMesh(*actor->actorMesh->mesh);
             }
             // Upload Material
-            if (actor.actorMesh->material->materialId == 0) {
-                createMaterial(*actor.actorMesh->material);
+            if (actor->actorMesh->material->materialId == 0) {
+                createMaterial(*actor->actorMesh->material);
             }
         }
     }
@@ -119,9 +125,12 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
     // Setup Device
     vkb::Device vkbDevice;
     {
+        VkPhysicalDeviceFeatures features{};
+        features.fillModeNonSolid = VK_TRUE;
         auto deviceSelector = vkb::PhysicalDeviceSelector(vkbInstance)
                 .set_minimum_version(1, 1)
                 .set_surface(surface)
+                .set_required_features(features)
                 .add_required_extensions(this->deviceExtensions)
                 .select();
 
@@ -612,32 +621,68 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
         vmaUnmapMemory(this->allocator, frame.cameraBuffer.allocation);
 
         uint64_t prevVMat = 0;
-        for (const Actor& actor : scene.actors) {
-            if (!actor.hasMesh()) continue;
-            StaticMesh& mesh = *actor.actorMesh;
-            VMaterial vMat = materialList.get(mesh.material->materialId);
-            if (prevVMat != mesh.material->materialId) {
-                prevVMat = mesh.material->materialId;
+        for (const Actor* actor : scene.actors) {
+            if (actor->hasMesh()) {
+                StaticMesh& mesh = *actor->actorMesh;
+                VMaterial vMat = materialList.get(mesh.material->materialId);
+                if (prevVMat != mesh.material->materialId) {
+                    prevVMat = mesh.material->materialId;
 
-                vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
-                vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout, 0, 1, &frame.globalDescriptor, 0, nullptr);
+                    vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+                    vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                            0, 1, &frame.globalDescriptor, 0, nullptr);
+                }
+
+                AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesId);
+                AllocatedBuffer indBuffer = this->bufferList.get(mesh.mesh->indicesId);
+
+                VkDeviceSize offset = 0;
+                vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+                vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+
+                glm::mat4 model = glm::translate(glm::mat4(1.f), actor->position);
+                model = glm::scale(model, actor->scale);
+                model = model * glm::mat4_cast(actor->rotation);
+
+                MeshPushConstants pushConstants = {model};
+                vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                                   sizeof(pushConstants), &pushConstants);
+
+                vkCmdDrawIndexed(frame.commandBuffer, mesh.mesh->indices.size(), 1, 0, 0, 0);
             }
 
-            AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesId);
-            AllocatedBuffer indBuffer = this->bufferList.get(mesh.mesh->indicesId);
+            if (actor->hasCollision()) {
+                Mesh* mesh = actor->actorCollider->getRenderMesh();
+                VMaterial vMat = materialList.get(collisionMat.materialId);
 
-            VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
-            vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+                if (prevVMat != collisionMat.materialId) {
+                    prevVMat = collisionMat.materialId;
 
-            glm::mat4 model = glm::translate(glm::mat4(1.f), actor.position);
-            model = glm::scale(model, actor.scale);
-            model = model * glm::mat4_cast(actor.rotation);
+                    vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+                    vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                            0, 1, &frame.globalDescriptor, 0, nullptr);
+                }
 
-            MeshPushConstants pushConstants = {model};
-            vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+                AllocatedBuffer vertBuffer = this->bufferList.get(mesh->verticesId);
+                AllocatedBuffer indBuffer = this->bufferList.get(mesh->indicesId);
 
-            vkCmdDrawIndexed(frame.commandBuffer, mesh.mesh->indices.size(), 1, 0, 0, 0);
+                VkDeviceSize offset = 0;
+                vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+                vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+
+                glm::mat4 model = actor->actorCollider->getRenderMeshTransform();
+
+                MeshPushConstants pushConstants = {
+                        model,
+                        actor->actorCollider->isColliding
+                            ? glm::vec4(0.f, 1.f, 0.f, 1.f)
+                            : glm::vec4(1.f, 0.f, 0.f, 1.f)
+                };
+                vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                                   sizeof(pushConstants), &pushConstants);
+
+                vkCmdDrawIndexed(frame.commandBuffer, mesh->indices.size(), 1, 0, 0, 0);
+            }
         }
 
         vkCmdEndRenderPass(frame.commandBuffer);
@@ -794,7 +839,7 @@ bool VulkanRenderer::createMaterial(Material& material) {
             .setInputAssemblyInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
             .setViewport(0.f, 0.f, (float) this->settings->windowWidth, (float) this->settings->windowHeight)
             .setScissor(0, 0, this->settings->windowWidth, this->settings->windowHeight)
-            .setRasterisationState(VK_POLYGON_MODE_FILL)
+            .setRasterisationState(material.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL)
             .setMultisampleStateDefault()
             .setColourBlendAttachmentDefault()
             .setDepthStencilState(true, true, VK_COMPARE_OP_LESS, false)

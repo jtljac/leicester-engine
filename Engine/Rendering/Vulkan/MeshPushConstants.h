@@ -8,4 +8,5 @@
 
 struct MeshPushConstants {
     glm::mat4 model;
+    glm::vec4 colour;
 };

@@ -8,7 +8,12 @@
 
 #include <fstream>
 #include <filesystem>
+#include <utility>
 #define MESHVERSION 1
+
+Mesh::Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices) : vertices(std::move(vertices)),
+                                                                          indices(std::move(indices)),
+                                                                          boundingBox(calculateBoundingBox()) {}
 
 bool Mesh::loadMeshFromFile(const std::string& filePath) {
     if (!std::filesystem::exists(filePath)) {
@@ -35,7 +40,35 @@ bool Mesh::loadMeshFromFile(const std::string& filePath) {
     file.read(reinterpret_cast<char*>(indices.data()), indexCount * sizeof(uint32_t));
 
     file.close();
+
+    this->boundingBox = calculateBoundingBox();
     return true;
 }
 
-Mesh::Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices) : vertices(vertices), indices(indices) {}
+
+Mesh* Mesh::createNewMeshFromFile(const std::string& filePath) {
+    Mesh* mesh = new Mesh;
+    if (!mesh->loadMeshFromFile(filePath)) {
+        delete mesh;
+        return nullptr;
+    }
+    return mesh;
+}
+
+BoundingBox Mesh::calculateBoundingBox() const {
+    float maxX = 0, maxY = 0, maxZ = 0;
+    float minX = 0, minY = 0, minZ = 0;
+    for (const auto& vertex: vertices) {
+        if (vertex.position.x > maxX) maxX = vertex.position.x;
+        else if (vertex.position.x < minX) minX = vertex.position.x;
+        if (vertex.position.y > maxY) maxY = vertex.position.y;
+        else if (vertex.position.y < minY) minY = vertex.position.y;
+        if (vertex.position.z > maxZ) maxZ = vertex.position.z;
+        else if (vertex.position.z > minZ) minZ = vertex.position.z;
+
+    }
+    return {
+            {minX, minY, minZ},
+            {maxX, maxY, maxZ}
+    };
+}

@@ -14,5 +14,8 @@ struct Material {
     std::string spirvVert;
     std::string spirvFrag;
 
+    bool wireframe;
+
     Material(std::string vertPath, std::string fragPath);
+    Material(std::string vertPath, std::string fragPath, bool wireframe);
 };

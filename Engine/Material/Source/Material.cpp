@@ -6,4 +6,12 @@
 
 #include "Material/Material.h"
 
-Material::Material(std::string  vertPath, std::string  fragPath) : spirvVert(std::move(vertPath)), spirvFrag(std::move(fragPath)) {}
+Material::Material(std::string  vertPath, std::string  fragPath) :
+        spirvVert(std::move(vertPath)),
+        spirvFrag(std::move(fragPath)),
+        wireframe(false) {}
+
+Material::Material(std::string vertPath, std::string fragPath, bool wireframe):
+        spirvVert(std::move(vertPath)),
+        spirvFrag(std::move(fragPath)),
+        wireframe(wireframe) {}
