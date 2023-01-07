@@ -17,14 +17,14 @@ class Octree {
     glm::vec3 dimensions;
 
 protected:
-    int TOPFRONTRIGHTINDEX = 0;
-    int TOPFRONTLEFINDEX = 1;
-    int BOTTOMFRONTRIGHTINDEX = 2;
-    int BOTTOMFRONTLEFINDEX = 3;
-    int TOPBACKRIGHTINDEX = 4;
-    int TOPBACKLEFTINDEX = 5;
-    int BOTTOMBACKRIGHTINDEX = 6;
-    int BOTTOMBACKLEFTINDEX = 7;
+    int BOTTOMFRONTRIGHTINDEX = 0;
+    int BOTTOMFRONTLEFINDEX = 1;
+    int TOPFRONTRIGHTINDEX = 2;
+    int TOPFRONTLEFINDEX = 3;
+    int BOTTOMBACKRIGHTINDEX = 4;
+    int BOTTOMBACKLEFTINDEX = 5;
+    int TOPBACKRIGHTINDEX = 6;
+    int TOPBACKLEFTINDEX = 7;
 
     /**
      * Calculate the octant the actor is in

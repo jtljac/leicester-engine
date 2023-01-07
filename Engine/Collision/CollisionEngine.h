@@ -14,9 +14,9 @@ struct CollisionResult {
 };
 
 class CollisionEngine {
-protected:
-    Scene* scene;
 public:
+    Scene* scene;
     bool getNearbyColliders(Actor* actor, std::vector<Actor*>& destPotentialActors);
+
     virtual CollisionResult testCollision(Actor* actor1, Actor* actor2) = 0;
 };

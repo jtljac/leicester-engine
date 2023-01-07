@@ -37,3 +37,5 @@ BoundingBox Actor::getBoundingBox() const {
 
     return actorCollider->getBoundingBox();
 }
+
+void Actor::handleInput(int key, int scancode, int action, int mods) {}

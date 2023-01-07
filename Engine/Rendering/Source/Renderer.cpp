@@ -25,8 +25,6 @@ bool Renderer::initialiseGlfw(EngineSettings& settings) {
         return false;
     }
 
-    glfwSetWindowUserPointer(this->window, this);
-
     setupGlfwCallbacks();
     return true;
 }

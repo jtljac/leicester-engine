@@ -22,4 +22,10 @@ public:
     void setRenderer(Renderer* pRenderer);
 
     Renderer* getRenderer() const;
+
+    void setCollisionEngine(CollisionEngine* pCollisionEngine);
+
+    CollisionEngine* getCollisionEngine() const;
+
+    void setScene(Scene* scene);
 };

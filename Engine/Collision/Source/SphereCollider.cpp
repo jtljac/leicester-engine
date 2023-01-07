@@ -12,13 +12,13 @@ SphereCollider::SphereCollider(float radius) : radius(radius) {}
 
 BoundingBox SphereCollider::getBoundingBox() {
     return {
-        glm::vec3(radius),
+        glm::vec3(-radius),
         glm::vec3(radius)
     };
 }
 
 glm::vec3 SphereCollider::findFurthestPointInDirection(glm::vec3 direction) const {
-    return direction * radius;
+    return glm::normalize(direction) * radius;
 }
 
 Mesh* SphereCollider::getRenderMesh() {

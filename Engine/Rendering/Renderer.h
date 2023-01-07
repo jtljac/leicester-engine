@@ -33,7 +33,6 @@ protected:
      */
     virtual void setupGLFWHints();
 public:
-    int shader = 0;
     Renderer() = default;
     virtual ~Renderer() = 0;
 

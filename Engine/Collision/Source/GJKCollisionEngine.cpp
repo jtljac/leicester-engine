@@ -38,9 +38,6 @@ bool GJKCollisionEngine::triangleCase(std::vector<glm::vec3>& points, glm::vec3&
     if (glm::dot(n, a0) > 0) {
         direction = n;
     } else {
-        glm::vec3 b = points[1];
-        points[1] = points[2];
-        points[2] = b;
         direction = -n;
     }
 
@@ -78,17 +75,17 @@ CollisionResult GJKCollisionEngine::testCollision(Actor* actor1, Actor* actor2) 
 
     glm::vec3 direction = glm::normalize(actor2->position - actor1->position);
     std::vector<glm::vec3> simplex = std::vector<glm::vec3>{
-            a->findFurthestPointInDirection(direction) - b->findFurthestPointInDirection(-direction)
+            (a->findFurthestPointInDirection(direction) + actor1->position) - (b->findFurthestPointInDirection(-direction) + actor2->position)
     };
     simplex.reserve(4);
     direction = ORIGIN - simplex[0];
 
     while (true) {
-        glm::vec3 newPoint = a->findFurthestPointInDirection(direction) - b->findFurthestPointInDirection(-direction);
-        if (glm::dot(newPoint, direction) <= 0) return CollisionResult{true};
+        glm::vec3 newPoint = (a->findFurthestPointInDirection(direction) + actor1->position) - (b->findFurthestPointInDirection(-direction) + actor2->position);
+        if (glm::dot(newPoint, direction) < 0) return CollisionResult{false};
 
         simplex.push_back(newPoint);
-        if (testSimplex(simplex, direction)) return CollisionResult{false};
+        if (testSimplex(simplex, direction)) return CollisionResult{true};
     }
 
     // Shouldn't ever get here

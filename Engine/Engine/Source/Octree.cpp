@@ -5,20 +5,20 @@
 #include "Engine/Octree.h"
 
 int Octree::getBoundingBoxOctant(glm::vec3 bbPosition, const BoundingBox& bb) {
-    glm::vec3 position = this->position - bbPosition;
+    glm::vec3 position = bbPosition - this->position;
 
     int index = 0;
-    if ((position.x + bb.min.x) < 0) {
+    if ((position.x + bb.min.x) <= 0) {
         if (position.x + bb.max.x >= 0) return -1;
         index += 1;
     }
 
-    if ((position.y + bb.min.y) < 0) {
+    if ((position.y + bb.min.y) <= 0) {
         if (position.y + bb.max.y >= 0) return -1;
         index += 2;
     }
 
-    if ((position.z + bb.min.z) < 0) {
+    if ((position.z + bb.min.z) <= 0) {
         if (position.z + bb.max.z >= 0) return -1;
         index += 4;
     }
@@ -27,40 +27,40 @@ int Octree::getBoundingBoxOctant(glm::vec3 bbPosition, const BoundingBox& bb) {
 }
 
 void Octree::getAllOverlappedOctants(glm::vec3 bbPosition, const BoundingBox& bb, std::vector<Octree*>& outOctants) {
-    glm::vec3 position = this->position - bbPosition;
+    glm::vec3 position = bbPosition - this->position;
 
-    if ((position.x + bb.max.x) < 0) {
-        if ((position.y + bb.max.y) < 0) {
-            if ((position.z + bb.max.z) < 0) {
+    if ((position.x + bb.max.x) >= 0) {
+        if ((position.y + bb.max.y) >= 0) {
+            if ((position.z + bb.max.z) >= 0) {
                 outOctants.push_back(subTrees[BOTTOMFRONTRIGHTINDEX]);
             }
-            if (position.z + bb.min.z >= 0) {
+            if (position.z + bb.min.z < 0) {
                 outOctants.push_back(subTrees[BOTTOMBACKRIGHTINDEX]);
             }
         }
-        if (position.y + bb.min.y >= 0) {
-            if ((position.z + bb.max.z) < 0) {
+        if (position.y + bb.min.y < 0) {
+            if ((position.z + bb.max.z) >= 0) {
                 outOctants.push_back(subTrees[TOPFRONTRIGHTINDEX]);
             }
-            if (position.z + bb.min.z >= 0) {
+            if (position.z + bb.min.z < 0) {
                 outOctants.push_back(subTrees[TOPBACKRIGHTINDEX]);
             }
         }
     }
-    if (position.x + bb.min.x >= 0) {
-        if ((position.y + bb.max.y) < 0) {
-            if ((position.z + bb.max.z) < 0) {
+    if (position.x + bb.min.x < 0) {
+        if ((position.y + bb.max.y) >= 0) {
+            if ((position.z + bb.max.z) >= 0) {
                 outOctants.push_back(subTrees[BOTTOMFRONTLEFINDEX]);
             }
-            if (position.z + bb.min.z >= 0) {
+            if (position.z + bb.min.z < 0) {
                 outOctants.push_back(subTrees[BOTTOMBACKLEFTINDEX]);
             }
         }
-        if (position.y + bb.min.y >= 0) {
-            if ((position.z + bb.max.z) < 0) {
+        if (position.y + bb.min.y < 0) {
+            if ((position.z + bb.max.z) >= 0) {
                 outOctants.push_back(subTrees[TOPFRONTLEFINDEX]);
             }
-            if (position.z + bb.min.z >= 0) {
+            if (position.z + bb.min.z < 0) {
                 outOctants.push_back(subTrees[TOPBACKLEFTINDEX]);
             }
         }
@@ -68,7 +68,7 @@ void Octree::getAllOverlappedOctants(glm::vec3 bbPosition, const BoundingBox& bb
 }
 
 int Octree::getPointOctant(glm::vec3 point) {
-    glm::vec3 position = this->position - point;
+    glm::vec3 position = point - this->position;
 
     int index = 0;
     if (position.x < 0) {
@@ -125,7 +125,7 @@ void Octree::getCloseActors(Actor* actor, std::vector<Actor*>& outVector) {
 
     if (!subTrees.empty()) {
         std::vector<Octree*> overlappedOctants;
-        getAllOverlappedOctants(actor->position, actor->getBoundingBox(), subTrees);
+        getAllOverlappedOctants(actor->position, actor->getBoundingBox(), overlappedOctants);
         for (const auto& octant: overlappedOctants) {
             octant->getCloseActors(actor, outVector);
         }

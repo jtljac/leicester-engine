@@ -609,7 +609,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     {
         vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        glm::vec3 camPos = {0.f, 0.f, -5};
+        glm::vec3 camPos = {0.f, 0.f, -10.f};
         GpuCameraStruct cameraData = {
                 glm::translate(glm::mat4(1.f), camPos),
                 glm::perspective(glm::radians(90.f), 1366.f/768.f, 0.1f, 200.f)
@@ -670,7 +670,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
                 vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
                 vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
 
-                glm::mat4 model = actor->actorCollider->getRenderMeshTransform();
+                glm::mat4 model = glm::translate(actor->actorCollider->getRenderMeshTransform(), actor->position);
 
                 MeshPushConstants pushConstants = {
                         model,

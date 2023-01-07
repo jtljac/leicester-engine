@@ -14,8 +14,9 @@ int LeicesterEngine::initialise() {
         return -1;
     }
 
-    // Register built in assets
+    glfwSetWindowUserPointer(renderer->getWindow(), this);
 
+    // Register built in assets
 
     return 0;
 }
@@ -28,15 +29,23 @@ void LeicesterEngine::setRenderer(Renderer* pRenderer) {
     this->renderer = pRenderer;
 }
 
+void LeicesterEngine::setCollisionEngine(CollisionEngine* pCollisionEngine) {
+    this->collisionEngine = pCollisionEngine;
+}
+
+CollisionEngine* LeicesterEngine::getCollisionEngine() const {
+    return collisionEngine;
+}
+
 int LeicesterEngine::startLoop() {
     double currentFrameTime;
 
     glfwSetKeyCallback(renderer->getWindow(), [](GLFWwindow* window, int key, int scancode, int action, int mods){
-        auto* context = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
-        if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
-            context->shader = (context->shader + 1) % 2;
-        } else if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-            glfwSetWindowShouldClose(context->getWindow(), GLFW_TRUE);
+        auto* context = static_cast<LeicesterEngine*>(glfwGetWindowUserPointer(window));
+        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+            glfwSetWindowShouldClose(context->renderer->getWindow(), GLFW_TRUE);
+        } else {
+            context->currentScene->handleInputs(key, scancode, action, mods);
         }
     });
 
@@ -64,6 +73,7 @@ int LeicesterEngine::startLoop() {
 
             bool anyCollisions = false;
             for (const auto& otherActor: potentialCollisions) {
+                if (!otherActor->hasCollision() || otherActor == actor) continue;
                 CollisionResult result = collisionEngine->testCollision(actor, otherActor);
                 anyCollisions |= result.collided;
             }
@@ -78,4 +88,11 @@ int LeicesterEngine::startLoop() {
     currentScene->onDestroy();
 
     return 0;
+}
+
+void LeicesterEngine::setScene(Scene* scene) {
+    if (currentScene != nullptr) delete currentScene;
+
+    currentScene = scene;
+    collisionEngine->scene = this->currentScene;
 }

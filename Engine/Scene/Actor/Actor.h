@@ -46,4 +46,6 @@ struct Actor : public LObject {
     bool hasMesh() const;
 
     BoundingBox getBoundingBox() const;
+
+    virtual void handleInput(int key, int scancode, int action, int mods);
 };

@@ -12,6 +12,7 @@ struct Actor;
 
 struct Scene : public LObject {
     std::vector<Actor*> actors;
+    Actor* controlledActor;
     Octree* octree = new Octree(glm::vec3(100), glm::vec3(0));
 
     void onCreate() override;
@@ -27,4 +28,8 @@ struct Scene : public LObject {
      */
     // template<class ActorClass, typename std::enable_if<std::is_base_of<Actor, ActorClass>::value>::type* = nullptr>
     void addActorToScene(Actor* actor);
+
+    void setControlledActor(Actor* actor);
+
+    void handleInputs(int key, int scancode, int action, int mods);
 };
