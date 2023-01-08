@@ -3,6 +3,7 @@
 //
 #include "../LeicesterEngine.h"
 #include "Utils/Logger.h"
+#include <glm/gtx/string_cast.hpp>
 
 int LeicesterEngine::initialise() {
     // Initialise GLFW
@@ -75,6 +76,9 @@ int LeicesterEngine::startLoop() {
             for (const auto& otherActor: potentialCollisions) {
                 if (!otherActor->hasCollision() || otherActor == actor) continue;
                 CollisionResult result = collisionEngine->testCollision(actor, otherActor);
+                if (result.collided) {
+                    Logger::info("Normal: " + glm::to_string(result.normal) + ", Distance: " + std::to_string(result.depth));
+                }
                 anyCollisions |= result.collided;
             }
 
