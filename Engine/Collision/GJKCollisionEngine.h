@@ -6,6 +6,13 @@
 #include "CollisionEngine.h"
 
 #include <vector>
+
+enum class GJKState {
+    BUILDING,
+    MISS,
+    HIT
+};
+
 class GJKCollisionEngine : public CollisionEngine {
 protected:
     /**
@@ -17,10 +24,10 @@ protected:
      */
     glm::vec3 getSupportPoint(Actor* actor1, Actor* actor2, glm::vec3 direction) const;
 
-    bool testSimplex(std::vector<glm::vec3>& points, glm::vec3& direction) const;
-    bool lineCase(std::vector<glm::vec3>& points, glm::vec3& direction) const;
-    bool triangleCase(std::vector<glm::vec3>& points, glm::vec3& direction) const;
-    bool simplexCase(std::vector<glm::vec3>& points, glm::vec3& direction) const;
+    GJKState testSimplex(std::vector<glm::vec3>& points, glm::vec3& direction) const;
+    GJKState lineCase(std::vector<glm::vec3>& points, glm::vec3& direction) const;
+    GJKState triangleCase(std::vector<glm::vec3>& points, glm::vec3& direction) const;
+    GJKState simplexCase(std::vector<glm::vec3>& points, glm::vec3& direction) const;
 
     /*=================================*/
     /* EPA                             */

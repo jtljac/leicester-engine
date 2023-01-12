@@ -7,13 +7,19 @@
 
 #include "Collider.h"
 
-struct AABBCollider : public Collider {
+class AABBCollider : public Collider {
+    static Mesh* renderMesh;
     BoundingBox boundingBox;
-
 public:
-    AABBCollider(const BoundingBox& boundingBox);
+
+    AABBCollider(CollisionMode collisionMode, const BoundingBox& boundingBox);
+    AABBCollider(CollisionMode collisionMode, glm::vec3 min, glm::vec3 max);
 
     BoundingBox getBoundingBox() override;
 
     [[nodiscard]] glm::vec3 findFurthestPointInDirection(glm::vec3 direction) const override;
+
+    Mesh* getRenderMesh() override;
+
+    glm::mat4 getRenderMeshTransform() override;
 };

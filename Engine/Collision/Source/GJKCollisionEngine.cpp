@@ -10,10 +10,11 @@
 
 #include <algorithm>
 #include "../GJKCollisionEngine.h"
+#include "Utils/Logger.h"
 
 const static glm::vec3 ORIGIN = glm::vec3(0);
 
-bool GJKCollisionEngine::testSimplex(std::vector<glm::vec3>& points, glm::vec3& direction) const {
+GJKState GJKCollisionEngine::testSimplex(std::vector<glm::vec3>& points, glm::vec3& direction) const {
     switch(points.size()) {
         case 2:
             return lineCase(points, direction);
@@ -23,14 +24,17 @@ bool GJKCollisionEngine::testSimplex(std::vector<glm::vec3>& points, glm::vec3& 
             return simplexCase(points, direction);
     }
     // Should never get here
-    return false;
+    return GJKState::BUILDING;
 }
 
-bool GJKCollisionEngine::lineCase(std::vector<glm::vec3>& points, glm::vec3& direction) const {
+GJKState GJKCollisionEngine::lineCase(std::vector<glm::vec3>& points, glm::vec3& direction) const {
     glm::vec3 ab = points[0] - points[1];
     glm::vec3 a0 = - points[1];
 
     direction = glm::cross(glm::cross(ab, a0), ab);
+
+    if (std::isnan(direction.x)) return GJKState::MISS;
+
 
     if (glm::dot(direction, direction) < 0.001f) {
         float min = std::abs(glm::dot(ab, {1, 0, 0}));
@@ -48,10 +52,10 @@ bool GJKCollisionEngine::lineCase(std::vector<glm::vec3>& points, glm::vec3& dir
         }
     }
 
-    return false;
+    return GJKState::BUILDING;
 }
 
-bool GJKCollisionEngine::triangleCase(std::vector<glm::vec3>& points, glm::vec3& direction) const {
+GJKState GJKCollisionEngine::triangleCase(std::vector<glm::vec3>& points, glm::vec3& direction) const {
     glm::vec3 ab = points[1] - points[2];
     glm::vec3 ac = points[0] - points[2];
     glm::vec3 a0 = - points[2];
@@ -64,10 +68,10 @@ bool GJKCollisionEngine::triangleCase(std::vector<glm::vec3>& points, glm::vec3&
         direction = -n;
     }
 
-    return false;
+    return GJKState::BUILDING;
 }
 
-bool GJKCollisionEngine::simplexCase(std::vector<glm::vec3>& points, glm::vec3& direction) const {
+GJKState GJKCollisionEngine::simplexCase(std::vector<glm::vec3>& points, glm::vec3& direction) const {
     // Where a is the most recently added point
     glm::vec3 ab = points[2] - points[3];
     glm::vec3 ac = points[1] - points[3];
@@ -89,7 +93,7 @@ bool GJKCollisionEngine::simplexCase(std::vector<glm::vec3>& points, glm::vec3& 
         return triangleCase(points, direction);
     }
 
-    return true;
+    return GJKState::HIT;
 }
 
 glm::vec3 GJKCollisionEngine::getSupportPoint(Actor* actor1, Actor* actor2, glm::vec3 direction) const {
@@ -114,7 +118,9 @@ CollisionResult GJKCollisionEngine::testCollision(Actor* actor1, Actor* actor2) 
         if (glm::dot(newPoint, direction) < 0) return CollisionResult{false};
 
         simplex.push_back(newPoint);
-        if (testSimplex(simplex, direction)) return this->epa(simplex, actor1, actor2);
+        GJKState state = testSimplex(simplex, direction);
+        if (state == GJKState::HIT) return this->epa(simplex, actor1, actor2);
+        else if (state == GJKState::MISS) return CollisionResult{false};
     }
 }
 
@@ -169,10 +175,9 @@ CollisionResult GJKCollisionEngine::epa(std::vector<glm::vec3>& polytope, Actor*
     size_t minFace = getFaceNormals(polytope, indices, normals);
 
     glm::vec3 minNormal;
-    float minDistance = std::numeric_limits<float>::max();
+    float minDistance;
 
-    // TODO: Rearrange, this doesn't need to loop if it works out it's done at the end
-    while (minDistance == std::numeric_limits<float>::max()) {
+    while (true) {
         minNormal = glm::vec3(normals[minFace]);
         minDistance = normals[minFace].w;
 
@@ -181,66 +186,53 @@ CollisionResult GJKCollisionEngine::epa(std::vector<glm::vec3>& polytope, Actor*
         float sDistance = glm::dot(minNormal, newPoint);
 
         // If the distance isn't the same (within a margin), add the new point to the polytobe and repair the faces
-        if (abs(sDistance - minDistance > 0.001f)) {
-//            minDistance = std::numeric_limits<float>::max();
+        if (std::abs(sDistance - minDistance) < 0.001f) break;
 
-            std::vector<std::pair<size_t, size_t>> uniqueEdges;
+        // Iterate through the normals and remove all the faces whose edges are in the same direction as the support point
+        std::vector<std::pair<size_t, size_t>> uniqueEdges;
+        for (size_t i = 0; i < normals.size(); ++i) {
+            if (glm::dot(glm::vec3(normals[i]), newPoint) < 0) {
+                size_t f = i * 3;
+                addIfUniqueEdge(indices, f  , f+1, uniqueEdges);
+                addIfUniqueEdge(indices, f+1, f+2, uniqueEdges);
+                addIfUniqueEdge(indices, f+2, f  , uniqueEdges);
 
-            // Iterate through the normals and remove all the faces whose edges are in the same direction as the support point
-            for (size_t i = 0; i < normals.size(); ++i) {
-                if (glm::dot(glm::vec3(normals[i]), newPoint) < 0) {
-                    size_t f = i * 3;
-                    addIfUniqueEdge(indices, f  , f+1, uniqueEdges);
-                    addIfUniqueEdge(indices, f+1, f+2, uniqueEdges);
-                    addIfUniqueEdge(indices, f+2, f  , uniqueEdges);
+                // Replace face with back and pop back, avoids slowdowns by shuffling the whole rest of the vector down
+                indices[f + 2] = indices.back();
+                indices.pop_back();
+                indices[f + 1] = indices.back();
+                indices.pop_back();
+                indices[f  ] = indices.back();
+                indices.pop_back();
 
-                    // Replace face with back and pop back, avoids slowdowns by shuffling the whole rest of the vector down
-                    indices[f + 2] = indices.back();
-                    indices.pop_back();
-                    indices[f + 1] = indices.back();
-                    indices.pop_back();
-                    indices[f  ] = indices.back();
-                    indices.pop_back();
+                normals[i] = normals.back();
+                normals.pop_back();
 
-                    normals[i] = normals.back();
-                    normals.pop_back();
-
-                    // Decrement so we check this index again
-                    --i;
-                }
+                // Decrement so we check this index again
+                --i;
             }
-
-            // Use the unique edges to build new faces
-            std::vector<size_t> newFaces;
-            for (auto& edge: uniqueEdges) {
-                newFaces.push_back(edge.first);
-                newFaces.push_back(edge.second);
-                newFaces.push_back(polytope.size());
-            }
-            polytope.push_back(newPoint);
-
-            // Calculate the normals for the new faces
-            std::vector<glm::vec4> newNormals;
-            size_t newMinFace = getFaceNormals(polytope, newFaces, newNormals);
-
-            // Calculate the new closest face
-            float oldMinDistance = std::numeric_limits<float>::max();
-//            for (size_t i = 0; i < normals.size(); i++) {
-//                if (normals[i].w < oldMinDistance) {
-//                    oldMinDistance = normals[i].w;
-//                    minFace = i;
-//                }
-//            }
-
-            // If the new point is smaller, then update the min face
-            if (newNormals[newMinFace].w < minDistance) {
-                minFace = newMinFace + normals.size();
-                minDistance = std::numeric_limits<float>::max();
-            }
-
-            indices.insert(indices.end(), newFaces.begin(), newFaces.end());
-            normals.insert(normals.end(), newNormals.begin(), newNormals.end());
         }
+
+        // Use the unique edges to build new faces
+        std::vector<size_t> newFaces;
+        for (auto& edge: uniqueEdges) {
+            newFaces.push_back(edge.first);
+            newFaces.push_back(edge.second);
+            newFaces.push_back(polytope.size());
+        }
+        polytope.push_back(newPoint);
+
+        // Calculate the normals for the new faces
+        std::vector<glm::vec4> newNormals;
+        size_t newMinFace = getFaceNormals(polytope, newFaces, newNormals);
+
+        // If the new point is bigger, exit the loop
+        if (newNormals[newMinFace].w >= minDistance) break;
+
+        // Otherwise update the min face and add new indices and normals
+        minFace = newMinFace + normals.size();
+        indices.insert(indices.end(), newFaces.begin(), newFaces.end());
+        normals.insert(normals.end(), newNormals.begin(), newNormals.end());
     }
 
     return {

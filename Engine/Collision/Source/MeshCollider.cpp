@@ -5,7 +5,7 @@
 #include <glm/geometric.hpp>
 #include "Collision/MeshCollider.h"
 
-MeshCollider::MeshCollider(Mesh* mesh) : mesh(mesh) {}
+MeshCollider::MeshCollider(CollisionMode collisionMode, Mesh* mesh) : Collider(collisionMode), mesh(mesh) {}
 
 BoundingBox MeshCollider::getBoundingBox() {
     return mesh->boundingBox;
@@ -13,7 +13,7 @@ BoundingBox MeshCollider::getBoundingBox() {
 
 glm::vec3 MeshCollider::findFurthestPointInDirection(glm::vec3 direction) const {
     glm::vec3 maxPoint;
-    float maxDistance = std::numeric_limits<float>::infinity();
+    float maxDistance = 0;
     for (const auto& vertex: mesh->vertices) {
         float distance = glm::dot(vertex.position, direction);
         if (distance > maxDistance) {

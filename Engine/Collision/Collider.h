@@ -9,12 +9,22 @@
 #include <Engine/BoundingBox.h>
 #include "Mesh/Mesh.h"
 
+enum class CollisionMode {
+    QUERY,
+    BLOCK,
+    NONE
+};
+
 struct Collider {
+    bool isColliding = false;
+    CollisionMode collisionMode;
+
+    explicit Collider(CollisionMode collisionMode);
+
     virtual BoundingBox getBoundingBox() = 0;
     virtual Mesh* getRenderMesh() = 0;
-    virtual glm::mat4 getRenderMeshTransform() = 0;
 
-    bool isColliding = false;
+    virtual glm::mat4 getRenderMeshTransform() = 0;
 
     [[nodiscard]] virtual glm::vec3 findFurthestPointInDirection(glm::vec3 direction) const = 0;
 };

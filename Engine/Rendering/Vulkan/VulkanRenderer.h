@@ -191,7 +191,7 @@ private:
      * @param mesh The mesh to upload
      * @return True if successful
      */
-    bool uploadMesh(Mesh& mesh);
+    void uploadMesh(Mesh& mesh);
 
     /**
      * Uploads a material to the GPU
@@ -223,5 +223,9 @@ public:
     void setupScene(Scene& scene) override;
     void drawFrame(double deltaTime, double gameTime, const Scene& scene) override;
     void cleanup() override;
+
+    bool registerMesh(Mesh* mesh) override;
+
+    bool registerMaterial(Material* material) override;
 };
 

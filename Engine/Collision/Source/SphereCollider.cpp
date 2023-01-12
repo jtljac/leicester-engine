@@ -6,9 +6,9 @@
 #include <Utils/FileUtils.h>
 #include <glm/ext/matrix_transform.hpp>
 
-Mesh* SphereCollider::sphereRenderMesh = Mesh::createNewMeshFromFile(FileUtils::getAssetsPath() + "/Shapes/Sphere.lmesh");
+Mesh* SphereCollider::renderMesh = Mesh::createNewMeshFromFile(FileUtils::getAssetsPath() + "/Shapes/Sphere.lmesh");
 
-SphereCollider::SphereCollider(float radius) : radius(radius) {}
+SphereCollider::SphereCollider(CollisionMode collisionMode, float radius) : Collider(collisionMode), radius(radius) {}
 
 BoundingBox SphereCollider::getBoundingBox() {
     return {
@@ -22,7 +22,7 @@ glm::vec3 SphereCollider::findFurthestPointInDirection(glm::vec3 direction) cons
 }
 
 Mesh* SphereCollider::getRenderMesh() {
-    return this->sphereRenderMesh;
+    return SphereCollider::renderMesh;
 }
 
 glm::mat4 SphereCollider::getRenderMeshTransform() {

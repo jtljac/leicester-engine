@@ -27,8 +27,6 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     // Initialise collision visualisation
     createMaterial(this->collisionMat);
 
-    uploadMesh(*SphereCollider::sphereRenderMesh);
-
     return true;
 }
 
@@ -36,13 +34,15 @@ void VulkanRenderer::setupScene(Scene& scene) {
     for (const Actor* actor : scene.actors) {
         if (actor->hasMesh()) {
             // Upload mesh
-            if (actor->actorMesh->mesh->verticesId == 0) {
-                uploadMesh(*actor->actorMesh->mesh);
-            }
+            registerMesh(actor->actorMesh->mesh);
+
             // Upload Material
-            if (actor->actorMesh->material->materialId == 0) {
-                createMaterial(*actor->actorMesh->material);
-            }
+            createMaterial(*actor->actorMesh->material);
+        }
+        if (actor->hasCollision()) {
+            // Upload collision mesh
+            // TODO: Add flag for this
+            registerMesh(actor->actorCollider->getRenderMesh());
         }
     }
 }
@@ -775,7 +775,7 @@ AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlag
     return allocatedBuffer;
 }
 
-bool VulkanRenderer::uploadMesh(Mesh& mesh) {
+void VulkanRenderer::uploadMesh(Mesh& mesh) {
     AllocatedBuffer allocatedBuffer = this->createBuffer(mesh.vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     mesh.verticesId = this->bufferList.insert(allocatedBuffer);
 
@@ -790,8 +790,6 @@ bool VulkanRenderer::uploadMesh(Mesh& mesh) {
     vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
     memcpy(data, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
     vmaUnmapMemory(this->allocator, allocatedBuffer.allocation);
-
-    return true;
 }
 
 bool VulkanRenderer::createMaterial(Material& material) {
@@ -860,4 +858,20 @@ bool VulkanRenderer::createMaterial(Material& material) {
 
 FrameData& VulkanRenderer::getCurrentFrame() {
     return frameData[currentFrame % settings->bufferCount];
+}
+
+bool VulkanRenderer::registerMesh(Mesh* mesh) {
+    if (mesh->verticesId && mesh->indicesId) return false;
+
+    uploadMesh(*mesh);
+
+    return true;
+}
+
+bool VulkanRenderer::registerMaterial(Material* material) {
+    if (material->materialId) return false;
+
+    createMaterial(*material);
+
+    return true;
 }

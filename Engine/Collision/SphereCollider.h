@@ -12,11 +12,9 @@
 class SphereCollider : public Collider {
 protected:
     float radius;
-
+    static Mesh* renderMesh;
 public:
-    static Mesh* sphereRenderMesh;
-
-    SphereCollider(float radius);
+    SphereCollider(CollisionMode collisionMode, float radius);
 
     BoundingBox getBoundingBox() override;
 

@@ -45,9 +45,25 @@ public:
     /**
      * Initialise the shader pipeline
      * @param settings the engine settings
-     * @return True if successful
+     * @return true if successful
      */
-     virtual void setupScene(Scene& scene) = 0;
+    virtual void setupScene(Scene& scene) = 0;
+
+    /**
+     * Register a mesh in the renderer
+     * Sets the vertices and indices ID
+     * @param mesh The mesh to register
+     * @return true if successful, false if the mesh has already been registered
+     */
+    virtual bool registerMesh(Mesh* mesh) = 0;
+
+    /**
+     * Register a material in the renderer
+     * Sets the material ID
+     * @param material The material to register
+     * @return true if successful, false if the material has already been registered
+     */
+    virtual bool registerMaterial(Material* material) = 0;
 
     /**
      * Draw a frame

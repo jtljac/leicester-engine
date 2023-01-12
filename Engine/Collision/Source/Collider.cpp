@@ -3,3 +3,5 @@
 //
 
 #include "Collision/Collider.h"
+
+Collider::Collider(CollisionMode collisionMode) : collisionMode(collisionMode) {}

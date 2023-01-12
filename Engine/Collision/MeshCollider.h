@@ -13,7 +13,7 @@ class MeshCollider : public Collider {
     Mesh* mesh;
 
 public:
-    explicit MeshCollider(Mesh* mesh);
+    explicit MeshCollider(CollisionMode collisionMode, Mesh* mesh);
 
     BoundingBox getBoundingBox() override;
 
