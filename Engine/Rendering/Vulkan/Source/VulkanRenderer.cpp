@@ -640,9 +640,9 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
                 vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
                 vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
 
-                glm::mat4 model = glm::translate(glm::mat4(1.f), actor->position);
-                model = glm::scale(model, actor->scale);
-                model = model * glm::mat4_cast(actor->rotation);
+                glm::mat4 model = glm::translate(glm::mat4(1.f), actor->getPosition());
+                model = glm::scale(model, actor->getScale());
+                model = model * glm::mat4_cast(actor->getRotation());
 
                 MeshPushConstants pushConstants = {model};
                 vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
@@ -670,7 +670,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
                 vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
                 vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
 
-                glm::mat4 model = glm::translate(actor->actorCollider->getRenderMeshTransform(), actor->position);
+                glm::mat4 model = glm::translate(actor->actorCollider->getRenderMeshTransform(), actor->getPosition());
 
                 MeshPushConstants pushConstants = {
                         model,

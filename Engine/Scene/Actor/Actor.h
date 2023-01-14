@@ -13,26 +13,17 @@
 struct Scene;
 
 struct Actor : public LObject {
-    // Appearance and collision
+
+// Appearance and collision
     StaticMesh *actorMesh = nullptr;
     Collider *actorCollider = nullptr;
 
     Scene* scene = nullptr;
 
-    // Position, rotation, scale
-    glm::vec3 position{0, 0, 0};
-    glm::vec3 scale{1, 1, 1};
-    glm::quat rotation = glm::quat({0, 0, 0});
-
     Actor(StaticMesh *mesh, Collider *collider);
-    Actor(const Actor& otherActor) {
-        actorMesh = otherActor.actorMesh;
-        actorCollider = otherActor.actorCollider;
-
-        position = glm::vec3(otherActor.position);
-        scale = glm::vec3(otherActor.scale);
-        rotation = glm::quat(otherActor.rotation);
-    }
+    Actor(StaticMesh* mesh, Collider* collider, const glm::vec3& position, const glm::vec3& scale,
+          const glm::quat& rotation);
+    Actor(const Actor& otherActor);
 
     void onCreate() override;
 
@@ -41,11 +32,11 @@ struct Actor : public LObject {
     void onDestroy() override;
 
     // Utils
-    bool hasCollision() const;
+    [[nodiscard]] bool hasCollision() const;
 
-    bool hasMesh() const;
+    [[nodiscard]] bool hasMesh() const;
 
-    BoundingBox getBoundingBox() const;
+    [[nodiscard]] BoundingBox getBoundingBox() const;
 
     virtual void handleInput(int key, int scancode, int action, int mods);
 };

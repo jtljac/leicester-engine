@@ -109,7 +109,7 @@ void Octree::insertNode(Actor* actor) {
         entities.push_back(actor);
         if (entities.size() == 8 && this->depth != this->MAX_DEPTH) spill();
     } else {
-        int quadrantIndex = getBoundingBoxOctant(actor->position, actor->getBoundingBox());
+        int quadrantIndex = getBoundingBoxOctant(actor->getPosition(), actor->getBoundingBox());
         if (quadrantIndex < 0) {
             entities.push_back(actor);
         } else {
@@ -125,7 +125,7 @@ void Octree::getCloseActors(Actor* actor, std::vector<Actor*>& outVector) {
 
     if (!subTrees.empty()) {
         std::vector<Octree*> overlappedOctants;
-        getAllOverlappedOctants(actor->position, actor->getBoundingBox(), overlappedOctants);
+        getAllOverlappedOctants(actor->getPosition(), actor->getBoundingBox(), overlappedOctants);
         for (const auto& octant: overlappedOctants) {
             octant->getCloseActors(actor, outVector);
         }

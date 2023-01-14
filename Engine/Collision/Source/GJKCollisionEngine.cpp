@@ -99,11 +99,11 @@ GJKState GJKCollisionEngine::simplexCase(std::vector<glm::vec3>& points, glm::ve
 glm::vec3 GJKCollisionEngine::getSupportPoint(Actor* actor1, Actor* actor2, glm::vec3 direction) const {
     const Collider* a = actor1->actorCollider;
     const Collider* b = actor2->actorCollider;
-    return (a->findFurthestPointInDirection(direction) + actor1->position) - (b->findFurthestPointInDirection(-direction) + actor2->position);
+    return (a->findFurthestPointInDirection(direction) + actor1->getPosition()) - (b->findFurthestPointInDirection(-direction) + actor2->getPosition());
 }
 
 CollisionResult GJKCollisionEngine::testCollision(Actor* actor1, Actor* actor2) {
-    glm::vec3 direction = actor2->position - actor1->position;
+    glm::vec3 direction = actor2->getPosition() - actor1->getPosition();
     if (glm::dot(direction, direction) < 0.0001f) {
         direction = {1, 0, 0};
     }

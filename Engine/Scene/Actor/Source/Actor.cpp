@@ -5,9 +5,14 @@
 #include <Scene/Actor/Actor.h>
 #include <Scene/Scene.h>
 
-Actor::Actor(StaticMesh* mesh, Collider* collider) : actorMesh(mesh), actorCollider(collider) {
+Actor::Actor(StaticMesh* mesh, Collider* collider) : actorMesh(mesh), actorCollider(collider), LObject() {}
 
-}
+Actor::Actor(StaticMesh* mesh, Collider* collider, const glm::vec3& position, const glm::vec3& scale, const glm::quat& rotation) : actorMesh(mesh), actorCollider(collider), LObject(position, scale, rotation,
+                                                                                                                                                                                     nullptr, true) {}
+
+Actor::Actor(const Actor& otherActor) : actorMesh(otherActor.actorMesh), actorCollider(otherActor.actorCollider),
+                                        LObject((LObject&) otherActor){}
+
 
 void Actor::onCreate() {
 

@@ -18,41 +18,41 @@ void addActorsToScene(Scene* scene) {
     Material* triangleMaterial = new Material("/meshtriangle.vert.spv", "/colourtriangle.frag.spv");
 
 
-    Actor* collisionObject = new Actor(nullptr, new SphereCollider(CollisionMode::QUERY, 1.f));
-    collisionObject->position = glm::vec3(3, 3, 3);
+    Actor* collisionObject = new Actor(nullptr, new SphereCollider(CollisionMode::BLOCK, 1.f));
+    collisionObject->setPosition(glm::vec3(3, 3, 3));
     scene->addActorToScene(collisionObject);
 
-    Actor* collisionObject2 = new Actor(nullptr, new SphereCollider(CollisionMode::QUERY, 1.f));
-    collisionObject2->position = glm::vec3(-3, 3, 3);
+    Actor* collisionObject2 = new Actor(nullptr, new SphereCollider(CollisionMode::BLOCK, 1.f));
+    collisionObject2->setPosition(glm::vec3(-3, 3, 3));
     scene->addActorToScene(collisionObject2);
 
-    Actor* collisionObject3 = new Actor(nullptr, new SphereCollider(CollisionMode::QUERY, 1.f));
-    collisionObject3->position = glm::vec3(3, -3, 3);
+    Actor* collisionObject3 = new Actor(nullptr, new SphereCollider(CollisionMode::BLOCK, 1.f));
+    collisionObject3->setPosition(glm::vec3(3, -3, 3));
     scene->addActorToScene(collisionObject3);
 
-    Actor* collisionObject4 = new Actor(nullptr, new SphereCollider(CollisionMode::QUERY, 1.f));
-    collisionObject4->position = glm::vec3(-3, -3, 3);
+    Actor* collisionObject4 = new Actor(nullptr, new SphereCollider(CollisionMode::BLOCK, 1.f));
+    collisionObject4->setPosition(glm::vec3(-3, -3, 3));
     scene->addActorToScene(collisionObject4);
 
-    Actor* collisionObject5 = new Actor(nullptr, new SphereCollider(CollisionMode::QUERY, 1.f));
-    collisionObject5->position = glm::vec3(3, 3, -3);
+    Actor* collisionObject5 = new Actor(nullptr, new SphereCollider(CollisionMode::BLOCK, 1.f));
+    collisionObject5->setPosition(glm::vec3(3, 3, -3));
     scene->addActorToScene(collisionObject5);
 
-    Actor* collisionObject6 = new Actor(nullptr, new SphereCollider(CollisionMode::QUERY, 1.f));
-    collisionObject6->position = glm::vec3(-3, 3, -3);
+    Actor* collisionObject6 = new Actor(nullptr, new SphereCollider(CollisionMode::BLOCK, 1.f));
+    collisionObject6->setPosition(glm::vec3(-3, 3, -3));
     scene->addActorToScene(collisionObject6);
 
-    Actor* collisionObject7 = new Actor(nullptr, new AABBCollider(CollisionMode::QUERY, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}));
-    collisionObject7->position = glm::vec3(3, -3, -3);
+    Actor* collisionObject7 = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}));
+    collisionObject7->setPosition(glm::vec3(3, -3, -3));
     scene->addActorToScene(collisionObject7);
 
-    Actor* collisionObject8 = new Actor(nullptr, new MeshCollider(CollisionMode::QUERY, Mesh::createNewMeshFromFile(FileUtils::getAssetsPath() + "/Shapes/Diamond.lmesh")));
+    Actor* collisionObject8 = new Actor(nullptr, new MeshCollider(CollisionMode::BLOCK, Mesh::createNewMeshFromFile(FileUtils::getAssetsPath() + "/Shapes/Diamond.lmesh")));
 
-    collisionObject8->position = glm::vec3(-3, -3, -3);
+    collisionObject8->setPosition(glm::vec3(-3, -3, -3));
     scene->addActorToScene(collisionObject8);
 
     Actor* monkey = new ControlledActor(new StaticMesh(mesh, triangleMaterial),
-                                        new SphereCollider(CollisionMode::QUERY, 1));
+                                        new SphereCollider(CollisionMode::BLOCK, 1));
     scene->addActorToScene(monkey);
     scene->setControlledActor(monkey);
 }
