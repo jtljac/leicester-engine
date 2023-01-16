@@ -50,6 +50,13 @@ int LeicesterEngine::startLoop() {
         }
     });
 
+    glfwSetInputMode(renderer->getWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    glfwSetCursorPosCallback(renderer->getWindow(), [](GLFWwindow* window, double xPos, double yPos) -> void {
+        auto* context = static_cast<LeicesterEngine*>(glfwGetWindowUserPointer(window));
+        context->currentScene->handleMouse(xPos,yPos);
+    });
+
     currentScene->onCreate();
     renderer->setupScene(*currentScene);
 

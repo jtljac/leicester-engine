@@ -46,3 +46,9 @@ void Scene::handleInputs(int key, int scancode, int action, int mods) {
     }
 }
 
+void Scene::handleMouse(double mouseX, double mouseY) {
+    if (controlledActor != nullptr) {
+        controlledActor->handleMouse(mouseX, mouseY);
+    }
+}
+

@@ -32,4 +32,6 @@ struct Scene : public LObject {
     void setControlledActor(Actor* actor);
 
     void handleInputs(int key, int scancode, int action, int mods);
+
+    void handleMouse(double mouseX, double mouseY);
 };

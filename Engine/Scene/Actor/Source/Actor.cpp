@@ -20,7 +20,7 @@ void Actor::onCreate() {
 
 
 void Actor::tick(double deltaTime) {
-    rotation = normalize(rotation * glm::quat({0, deltaTime, 0}));
+//    rotation = normalize(rotation * glm::quat({0, deltaTime, 0}));
 }
 
 void Actor::onDestroy() {
@@ -44,3 +44,5 @@ BoundingBox Actor::getBoundingBox() const {
 }
 
 void Actor::handleInput(int key, int scancode, int action, int mods) {}
+
+void Actor::handleMouse(double mouseX, double mouseY) {}

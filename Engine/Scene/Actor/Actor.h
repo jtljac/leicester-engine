@@ -39,4 +39,6 @@ struct Actor : public LObject {
     [[nodiscard]] BoundingBox getBoundingBox() const;
 
     virtual void handleInput(int key, int scancode, int action, int mods);
+
+    virtual void handleMouse(double mouseX, double mouseY);
 };
