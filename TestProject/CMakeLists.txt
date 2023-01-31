@@ -9,3 +9,4 @@ target_sources(leicester-game PRIVATE
 )
 
 set(assetDest "${CMAKE_CURRENT_BINARY_DIR}/Assets"  CACHE INTERNAL "")
+set(projectAssetDir "${CMAKE_CURRENT_LIST_DIR}/Assets"  CACHE INTERNAL "")

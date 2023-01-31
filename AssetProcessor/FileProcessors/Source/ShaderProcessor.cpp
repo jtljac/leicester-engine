@@ -10,13 +10,18 @@
 #include <ios>
 #include <filesystem>
 
-LEIncluder::LEIncluder(const std::string& includePath) {
-    if (includePath.empty() || !std::filesystem::is_directory(includePath)) {
-        std::cout << "Include path " << includePath << " doesn't point to a directory, standard includes will not work" << std::endl;
-        return;
+LEIncluder::LEIncluder(const std::vector<std::string>& includePaths) {
+    for (const auto& includePath: includePaths) {
+        if (!std::filesystem::is_directory(includePath))
+            std::cout << "Include path (\"" << includePath << "\") doesn't point to a directory, it will be ignored" << std::endl;
+        else {
+            this->includePaths.push_back(includePath);
+        }
     }
 
-    this->includePath = includePath;
+    if (this->includePaths.empty()) {
+        std::cout << "No valid include paths have been provided, standard includes will be disabled" << std::endl;
+    }
 }
 
 shaderc_include_result* LEIncluder::makeError(const char* message) {
@@ -28,22 +33,45 @@ shaderc_include_result* LEIncluder::GetInclude(const char* requested_source, sha
     std::filesystem::path filePath;
 
     if (type == shaderc_include_type_relative) {
-        filePath = std::filesystem::path(requested_source).parent_path();
-    } else if (!this->includePath.empty()){
-        filePath = this->includePath;
+        return handleRelativeInclude(std::filesystem::path(requesting_source).parent_path() / requested_source);
+    } else if (!this->includePaths.empty()){
+        return handleStandardInclude(std::filesystem::path(requested_source));
     } else {
         return LEIncluder::makeError("Regular includes are disabled");
     }
-    filePath /= requested_source;
+}
 
+void LEIncluder::ReleaseInclude(shaderc_include_result* data) {
+    delete (IncludeResultStorage*) data->user_data;
+    delete data;
+}
+
+shaderc_include_result* LEIncluder::handleRelativeInclude(const std::filesystem::path& filePath) const {
     if (!exists(filePath)) {
-        std::string message = "Failed to find requested ";
-        message += (type == shaderc_include_type_relative ? "relative" : "regular");
-        message += " file: ";
-        message += requested_source;
+        std::string message = "Failed to find requested relative file: ";
+        message += filePath;
         return LEIncluder::makeError(message.c_str());
     }
 
+    return getIncludeResult(filePath);
+}
+
+shaderc_include_result* LEIncluder::handleStandardInclude(const std::filesystem::path& filePath) const {
+    for (const auto& includePath: includePaths) {
+        std::filesystem::path path(includePath);
+        path /= filePath;
+
+        if (!exists(filePath)) continue;
+
+        return getIncludeResult(path);
+    }
+
+    std::string message = "Failed to find any files in the include paths that match the path: ";
+    message += filePath;
+    return LEIncluder::makeError(message.c_str());
+}
+
+shaderc_include_result* LEIncluder::getIncludeResult(const std::filesystem::path& filePath) const {
     IncludeResultStorage* storage = new IncludeResultStorage {filePath, {}};
     {
         std::ifstream reader(filePath, std::ios::ate);
@@ -56,25 +84,20 @@ shaderc_include_result* LEIncluder::GetInclude(const char* requested_source, sha
     }
 
     return new shaderc_include_result {
-        storage->filePath.c_str(),
-        storage->filePath.size(),
-        storage->contents.data(),
-        storage->contents.size(),
-        storage
+            storage->filePath.c_str(),
+            storage->filePath.size(),
+            storage->contents.data(),
+            storage->contents.size(),
+            storage
     };
-}
-
-void LEIncluder::ReleaseInclude(shaderc_include_result* data) {
-    delete (IncludeResultStorage*) data->user_data;
-    delete data;
 }
 
 
 /* ==================================================================== */
 
 
-ShaderProcessor::ShaderProcessor(const std::string& includePath) {
-    options.SetIncluder(std::make_unique<LEIncluder>(includePath));
+ShaderProcessor::ShaderProcessor(std::vector<std::string> includePaths) {
+    options.SetIncluder(std::make_unique<LEIncluder>(includePaths));
 }
 
 shaderc_shader_kind ShaderProcessor::kindFromExtension(const std::string& extension) {

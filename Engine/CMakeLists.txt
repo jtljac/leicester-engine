@@ -14,7 +14,7 @@ target_include_directories(leicester-engine PUBLIC ./)
 target_sources(leicester-engine PRIVATE "Source/LeicesterEngine.cpp")
 
 add_custom_target(assetProcessor
-        COMMAND asset-processor "${CMAKE_CURRENT_LIST_DIR}/Assets" "${assetDest}"
+        COMMAND asset-processor "${CMAKE_CURRENT_LIST_DIR}/Assets" "${projectAssetDir}" "${assetDest}" "${CMAKE_CURRENT_LIST_DIR}/ShaderLibrary"
         COMMENT "Running Asset Processor"
         )
 add_dependencies(leicester-engine assetProcessor)
