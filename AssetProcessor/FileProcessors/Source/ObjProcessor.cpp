@@ -91,5 +91,5 @@ void ObjProcessor::writeMesh(const std::string& dest, std::vector<Vertex>& verti
 }
 
 std::string ObjProcessor::getConversionMessage(const std::string& src, const std::string& dest) {
-    return "Converting " + src + " to lmesh " + dest;
+    return "Converting " + src + " to lmesh " + replaceExtension(dest, "lmesh");
 }
