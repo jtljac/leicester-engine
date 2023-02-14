@@ -1,5 +1,6 @@
 /**
  * This code (and it's source) was created by following these guides:
+ * <br>
  * https://vkguide.dev/             MIT Licence: https://github.com/vblanco20-1/vulkan-guide/blob/master/LICENSE.txt
  * https://vulkan-tutorial.com/     CCO 1.0 Universal Licence: https://github.com/Overv/VulkanTutorial/blob/master/README.md#license
  *
@@ -32,6 +33,9 @@ class VulkanRenderer : public Renderer {
     VkDevice device;                            // Device Handle for commands
     VkSurfaceKHR surface;                       // Window surface handle
 
+    // GPU info
+    VkPhysicalDeviceProperties gpuProperties;
+
     // Memory Management
     VmaAllocator allocator;         // The GPU memory allocator
 
@@ -51,6 +55,10 @@ class VulkanRenderer : public Renderer {
     // Descriptor Set
     VkDescriptorSetLayout globalDescriptorSetLayout;
     VkDescriptorPool descriptorPool;
+
+    // Scene data
+    GPUSceneData sceneParams;
+    AllocatedBuffer sceneParamsBuffer;
 
     // Frame Data
     unsigned int currentFrame = 0;              // The current frame being rendered
@@ -79,6 +87,15 @@ protected:
     std::vector<const char*> deviceExtensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME // The extension that enables the use of a swap chain for presenting
     };
+
+    /**
+     * Pad the given size so it's aligned to the GPU's alignment boundaries
+     * <br>
+     * Taken from https://github.com/SaschaWillems/Vulkan/tree/master/examples/dynamicuniformbuffer    MIT License: https://github.com/SaschaWillems/Vulkan/blob/master/LICENSE.md
+     * @param originalSize The original size of the data being padded
+     * @return a new size, aligned to the GPU's alignment boundaries
+     */
+    size_t padUniformBufferSize(size_t originalSize);
 
 private:
     /**
@@ -131,7 +148,7 @@ private:
      * @param frameData the FrameData object being populated
      * @return True if successful
      */
-    void initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData);
+    void initFrameDataDescriptorSets(EngineSettings& settings, unsigned int frameIndex, FrameData& frameData);
 
     /**
      * Sets up the swapchainHandle

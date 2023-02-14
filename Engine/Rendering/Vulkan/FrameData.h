@@ -6,7 +6,7 @@
  */
 #pragma once
 #include <vulkan/vulkan.h>
-
+#include <glm/glm.hpp>
 #include "AllocationStructures.h"
 
 struct FrameData {
@@ -36,4 +36,13 @@ struct SwapchainData {
     VkImageView depthImageView;
 
     VkFramebuffer framebuffer;
+};
+
+// For Testing, from: https://vkguide.dev/docs/chapter-4/descriptors_code_more/
+struct GPUSceneData {
+    glm::vec4 fogColor; // w is for exponent
+    glm::vec4 fogDistances; //x for min, y for max, zw unused.
+    glm::vec4 ambientColor;
+    glm::vec4 sunlightDirection; //w for sun power
+    glm::vec4 sunlightColor;
 };

@@ -13,6 +13,7 @@
 
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
+#include "../VkShortcuts.h"
 #include "Rendering/GPUStructures/GpuCameraStruct.h"
 #include <Collision/SphereCollider.h>
 
@@ -59,7 +60,6 @@ void VulkanRenderer::setupGLFWHints() {
 }
 
 bool VulkanRenderer::initVulkan(EngineSettings& settings) {
-
     vkb::Instance vkbInstance;
     // Setup Vulkan Instance
     {
@@ -153,6 +153,7 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
 
         this->device = vkbDevice.device;
         this->gpu = vkbDevice.physical_device;
+        this->gpuProperties = vkbDevice.physical_device.properties;
 
         this->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
     }
@@ -176,20 +177,21 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
 }
 
 void VulkanRenderer::initDescriptors(EngineSettings& settings) {
-    VkDescriptorSetLayoutBinding cameraBufferBinding = {};
-    cameraBufferBinding.binding = 0;
-    cameraBufferBinding.descriptorCount = 1;
-    cameraBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    const size_t sceneParamBufferSize = settings.bufferCount * padUniformBufferSize(sizeof(GPUSceneData));
+    sceneParamsBuffer = createBuffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-    cameraBufferBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    VkDescriptorSetLayoutBinding cameraBinding = VKShortcuts::createDescriptorSetLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+    VkDescriptorSetLayoutBinding sceneDataBinding = VKShortcuts::createDescriptorSetLayoutBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    VkDescriptorSetLayoutBinding bindings[] = {cameraBinding, sceneDataBinding};
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     descriptorSetLayoutCreateInfo.pNext = nullptr;
     descriptorSetLayoutCreateInfo.flags = 0;
 
-    descriptorSetLayoutCreateInfo.bindingCount = 1;
-    descriptorSetLayoutCreateInfo.pBindings = &cameraBufferBinding;
+    descriptorSetLayoutCreateInfo.bindingCount = 2;
+    descriptorSetLayoutCreateInfo.pBindings = bindings;
     vkCreateDescriptorSetLayout(this->device, &descriptorSetLayoutCreateInfo, nullptr, &this->globalDescriptorSetLayout);
 
     std::vector<VkDescriptorPoolSize> sizes = {
@@ -211,12 +213,13 @@ void VulkanRenderer::initDescriptors(EngineSettings& settings) {
 bool VulkanRenderer::initFrameData(EngineSettings& settings, unsigned int graphicsQueueIndex) {
     frameData.resize(settings.bufferCount);
 
-    for (auto& data : frameData) {
+    for (int i = 0; i < frameData.size(); ++i) {
+        FrameData& data = this->frameData[i];
         if (!initFrameDataGraphicsPools(settings, data, graphicsQueueIndex)) return false;
 
         if (!initFrameDataSyncObjects(settings, data)) return false;
 
-        initFrameDataDescriptorSets(settings, data);
+        initFrameDataDescriptorSets(settings, i, data);
     }
     return true;
 }
@@ -279,7 +282,8 @@ bool VulkanRenderer::initFrameDataSyncObjects(EngineSettings& settings, FrameDat
     return true;
 }
 
-void VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData) {
+void
+VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, unsigned int frameIndex, FrameData& frameData) {
     frameData.cameraBuffer = createBuffer(sizeof(GpuCameraStruct), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
@@ -292,22 +296,22 @@ void VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, Frame
 
     vkAllocateDescriptorSets(this->device, &descriptorSetAllocateInfo, &frameData.globalDescriptor);
 
-    VkDescriptorBufferInfo descriptorBufferInfo;
-    descriptorBufferInfo.buffer = frameData.cameraBuffer.buffer;
-    descriptorBufferInfo.offset = 0;
-    descriptorBufferInfo.range = sizeof(GpuCameraStruct);
+    VkDescriptorBufferInfo cameraInfo;
+    cameraInfo.buffer = frameData.cameraBuffer.buffer;
+    cameraInfo.offset = 0;
+    cameraInfo.range = sizeof(GpuCameraStruct);
 
-    VkWriteDescriptorSet writeDescriptorSet = {};
-    writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet.pNext = nullptr;
+    VkDescriptorBufferInfo sceneInfo;
+    sceneInfo.buffer = sceneParamsBuffer.buffer;
+    sceneInfo.offset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
+    sceneInfo.range = sizeof(GPUSceneData);
 
-    writeDescriptorSet.dstBinding = 0;
-    writeDescriptorSet.dstSet = frameData.globalDescriptor;
+    VkWriteDescriptorSet cameraWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo);
+    VkWriteDescriptorSet sceneWrite = VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &sceneInfo);
 
-    writeDescriptorSet.descriptorCount = 1;
-    writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
-    vkUpdateDescriptorSets(this->device, 1, &writeDescriptorSet, 0, nullptr);
+    VkWriteDescriptorSet setWrites[] = {cameraWrite, sceneWrite};
+
+    vkUpdateDescriptorSets(this->device, 2, setWrites, 0, nullptr);
 }
 
 bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
@@ -620,6 +624,16 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
         memcpy(data, &cameraData, sizeof(GpuCameraStruct));
         vmaUnmapMemory(this->allocator, frame.cameraBuffer.allocation);
 
+        float framed = (this->currentFrame / 120.f);
+
+        sceneParams.ambientColor = { std::sin(framed),0,std::cos(framed),1 };
+        char* sceneData;
+        vmaMapMemory(allocator, sceneParamsBuffer.allocation , (void**)&sceneData);
+        int frameIndex = swapchainIndex;
+        sceneData += padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
+        memcpy(sceneData, &sceneParams, sizeof(GPUSceneData));
+        vmaUnmapMemory(allocator, sceneParamsBuffer.allocation);
+
         uint64_t prevVMat = 0;
         for (const Actor* actor : scene.actors) {
             if (actor->hasMesh()) {
@@ -874,4 +888,14 @@ bool VulkanRenderer::registerMaterial(Material* material) {
     createMaterial(*material);
 
     return true;
+}
+
+size_t VulkanRenderer::padUniformBufferSize(size_t originalSize) {
+    // Calculate required alignment based on minimum device offset alignment
+    size_t minUboAlignment = gpuProperties.limits.minUniformBufferOffsetAlignment;
+    size_t alignedSize = originalSize;
+    if (minUboAlignment > 0) {
+        alignedSize = (alignedSize + minUboAlignment - 1) & ~(minUboAlignment - 1);
+    }
+    return alignedSize;
 }
