@@ -181,7 +181,7 @@ void VulkanRenderer::initDescriptors(EngineSettings& settings) {
     sceneParamsBuffer = createBuffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
     VkDescriptorSetLayoutBinding cameraBinding = VKShortcuts::createDescriptorSetLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-    VkDescriptorSetLayoutBinding sceneDataBinding = VKShortcuts::createDescriptorSetLayoutBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    VkDescriptorSetLayoutBinding sceneDataBinding = VKShortcuts::createDescriptorSetLayoutBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
     VkDescriptorSetLayoutBinding bindings[] = {cameraBinding, sceneDataBinding};
 
@@ -195,7 +195,8 @@ void VulkanRenderer::initDescriptors(EngineSettings& settings) {
     vkCreateDescriptorSetLayout(this->device, &descriptorSetLayoutCreateInfo, nullptr, &this->globalDescriptorSetLayout);
 
     std::vector<VkDescriptorPoolSize> sizes = {
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10}
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10}
     };
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
@@ -303,11 +304,11 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, unsigned i
 
     VkDescriptorBufferInfo sceneInfo;
     sceneInfo.buffer = sceneParamsBuffer.buffer;
-    sceneInfo.offset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
+    sceneInfo.offset = 0;
     sceneInfo.range = sizeof(GPUSceneData);
 
     VkWriteDescriptorSet cameraWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo);
-    VkWriteDescriptorSet sceneWrite = VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &sceneInfo);
+    VkWriteDescriptorSet sceneWrite = VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo);
 
     VkWriteDescriptorSet setWrites[] = {cameraWrite, sceneWrite};
 
@@ -541,6 +542,8 @@ void VulkanRenderer::cleanup() {
 
     deletionQueue.flush(this->device);
 
+    vmaDestroyBuffer(this->allocator, sceneParamsBuffer.buffer, sceneParamsBuffer.allocation);
+
     vkDestroyRenderPass(this->device, this->renderPass, nullptr);
 
     // Cleanup frameData
@@ -624,7 +627,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
         memcpy(data, &cameraData, sizeof(GpuCameraStruct));
         vmaUnmapMemory(this->allocator, frame.cameraBuffer.allocation);
 
-        float framed = (this->currentFrame / 120.f);
+        float framed = (this->currentFrame / 1200.f);
 
         sceneParams.ambientColor = { std::sin(framed),0,std::cos(framed),1 };
         char* sceneData;
@@ -643,8 +646,10 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
                     prevVMat = mesh.material->materialId;
 
                     vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+
+                    uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
                     vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
-                                            0, 1, &frame.globalDescriptor, 0, nullptr);
+                                            0, 1, &frame.globalDescriptor, 1, &uniformOffset);
                 }
 
                 AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesId);
@@ -673,8 +678,10 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
                     prevVMat = collisionMat.materialId;
 
                     vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+
+                    uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
                     vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
-                                            0, 1, &frame.globalDescriptor, 0, nullptr);
+                                            0, 1, &frame.globalDescriptor, 1, &uniformOffset);
                 }
 
                 AllocatedBuffer vertBuffer = this->bufferList.get(mesh->verticesId);
