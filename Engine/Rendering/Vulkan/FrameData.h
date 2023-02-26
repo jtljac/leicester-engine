@@ -20,10 +20,11 @@ struct FrameData {
 
     // Descriptor Sets
     VkDescriptorSet globalDescriptor;
+    VkDescriptorSet passDescriptor;
 
     // Buffers
     AllocatedBuffer cameraBuffer;
-
+    AllocatedBuffer objectBuffer;
 };
 
 struct SwapchainData {

@@ -6,8 +6,11 @@
 
 #include <glm/glm.hpp>
 
-struct GpuCameraStruct {
+struct GpuCameraData {
     glm::mat4 view;
     glm::mat4 proj;
 };
 
+struct GpuObjectData {
+    glm::mat4 modelMatrix;
+};

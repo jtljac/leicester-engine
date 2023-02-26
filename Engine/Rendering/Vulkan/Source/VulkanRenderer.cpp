@@ -14,7 +14,7 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #include "../VkShortcuts.h"
-#include "Rendering/GPUStructures/GpuCameraStruct.h"
+#include "Rendering/GPUStructures/GpuStructs.h"
 #include <Collision/SphereCollider.h>
 
 bool VulkanRenderer::initialise(EngineSettings& settings) {
@@ -141,7 +141,13 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
 
         vkb::PhysicalDevice vkbPDevice = deviceSelector.value();
 
+        VkPhysicalDeviceShaderDrawParametersFeatures drawParametersFeatures = {};
+        drawParametersFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
+        drawParametersFeatures.pNext = nullptr;
+        drawParametersFeatures.shaderDrawParameters = VK_TRUE;
+
         auto vkbDev = vkb::DeviceBuilder(vkbPDevice)
+                .add_pNext(&drawParametersFeatures)
                 .build();
 
         if (!deviceSelector.has_value()) {
@@ -177,26 +183,54 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
 }
 
 void VulkanRenderer::initDescriptors(EngineSettings& settings) {
-    const size_t sceneParamBufferSize = settings.bufferCount * padUniformBufferSize(sizeof(GPUSceneData));
-    sceneParamsBuffer = createBuffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    // Global Descriptor
+    {
+        const size_t sceneParamBufferSize = settings.bufferCount * padUniformBufferSize(sizeof(GPUSceneData));
+        sceneParamsBuffer = createBuffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-    VkDescriptorSetLayoutBinding cameraBinding = VKShortcuts::createDescriptorSetLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-    VkDescriptorSetLayoutBinding sceneDataBinding = VKShortcuts::createDescriptorSetLayoutBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+        VkDescriptorSetLayoutBinding cameraBinding = VKShortcuts::createDescriptorSetLayoutBinding(0,
+                                                                                                   VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                                                                                   VK_SHADER_STAGE_VERTEX_BIT);
+        VkDescriptorSetLayoutBinding sceneDataBinding = VKShortcuts::createDescriptorSetLayoutBinding(1,
+                                                                                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+                                                                                                      VK_SHADER_STAGE_VERTEX_BIT |
+                                                                                                      VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    VkDescriptorSetLayoutBinding bindings[] = {cameraBinding, sceneDataBinding};
+        VkDescriptorSetLayoutBinding bindings[] = {cameraBinding, sceneDataBinding};
 
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
-    descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCreateInfo.pNext = nullptr;
-    descriptorSetLayoutCreateInfo.flags = 0;
+        VkDescriptorSetLayoutCreateInfo globalDescriptorSetLayoutCreateInfo = {};
+        globalDescriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        globalDescriptorSetLayoutCreateInfo.pNext = nullptr;
+        globalDescriptorSetLayoutCreateInfo.flags = 0;
 
-    descriptorSetLayoutCreateInfo.bindingCount = 2;
-    descriptorSetLayoutCreateInfo.pBindings = bindings;
-    vkCreateDescriptorSetLayout(this->device, &descriptorSetLayoutCreateInfo, nullptr, &this->globalDescriptorSetLayout);
+        globalDescriptorSetLayoutCreateInfo.bindingCount = 2;
+        globalDescriptorSetLayoutCreateInfo.pBindings = bindings;
+        vkCreateDescriptorSetLayout(this->device, &globalDescriptorSetLayoutCreateInfo, nullptr,
+                                    &this->globalDescriptorSetLayout);
+    }
+
+    // Pass Descriptor
+    {
+        VkDescriptorSetLayoutBinding objectBinding = VKShortcuts::createDescriptorSetLayoutBinding(0,
+                                                                                                   VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                                                                                   VK_SHADER_STAGE_VERTEX_BIT);
+
+        VkDescriptorSetLayoutCreateInfo passDescriptorSetLayoutCreateInfo = {};
+        passDescriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        passDescriptorSetLayoutCreateInfo.pNext = nullptr;
+        passDescriptorSetLayoutCreateInfo.flags = 0;
+
+        passDescriptorSetLayoutCreateInfo.bindingCount = 1;
+        passDescriptorSetLayoutCreateInfo.pBindings = &objectBinding;
+        vkCreateDescriptorSetLayout(this->device, &passDescriptorSetLayoutCreateInfo, nullptr,
+                                    &this->passDescriptorSetLayout);
+    }
 
     std::vector<VkDescriptorPoolSize> sizes = {
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10}
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}
     };
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
@@ -285,34 +319,60 @@ bool VulkanRenderer::initFrameDataSyncObjects(EngineSettings& settings, FrameDat
 
 void
 VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, unsigned int frameIndex, FrameData& frameData) {
-    frameData.cameraBuffer = createBuffer(sizeof(GpuCameraStruct), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    constexpr int maxObjectCount = 10000;
 
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
-    descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.pNext = nullptr;
+    frameData.cameraBuffer = createBuffer(sizeof(GpuCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    frameData.objectBuffer = createBuffer(sizeof(GpuObjectData) * maxObjectCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-    descriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
-    descriptorSetAllocateInfo.descriptorSetCount = 1;
-    descriptorSetAllocateInfo.pSetLayouts = &this->globalDescriptorSetLayout;
+    // Global Descriptor
+    {
+        VkDescriptorSetAllocateInfo globalDescriptorSetAllocateInfo = {};
+        globalDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        globalDescriptorSetAllocateInfo.pNext = nullptr;
 
-    vkAllocateDescriptorSets(this->device, &descriptorSetAllocateInfo, &frameData.globalDescriptor);
+        globalDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
+        globalDescriptorSetAllocateInfo.descriptorSetCount = 1;
+        globalDescriptorSetAllocateInfo.pSetLayouts = &this->globalDescriptorSetLayout;
+
+        vkAllocateDescriptorSets(this->device, &globalDescriptorSetAllocateInfo, &frameData.globalDescriptor);
+    }
+
+    // Pass Descriptor
+    {
+        VkDescriptorSetAllocateInfo passDescriptorSetAllocateInfo = {};
+        passDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        passDescriptorSetAllocateInfo.pNext = nullptr;
+
+        passDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
+        passDescriptorSetAllocateInfo.descriptorSetCount = 1;
+        passDescriptorSetAllocateInfo.pSetLayouts = &this->passDescriptorSetLayout;
+
+        vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.passDescriptor);
+    }
 
     VkDescriptorBufferInfo cameraInfo;
     cameraInfo.buffer = frameData.cameraBuffer.buffer;
     cameraInfo.offset = 0;
-    cameraInfo.range = sizeof(GpuCameraStruct);
+    cameraInfo.range = sizeof(GpuCameraData);
 
     VkDescriptorBufferInfo sceneInfo;
     sceneInfo.buffer = sceneParamsBuffer.buffer;
     sceneInfo.offset = 0;
     sceneInfo.range = sizeof(GPUSceneData);
 
+    VkDescriptorBufferInfo objectInfo;
+    objectInfo.buffer = frameData.objectBuffer.buffer;
+    objectInfo.offset = 0;
+    objectInfo.range = sizeof(GpuObjectData) * maxObjectCount;
+
     VkWriteDescriptorSet cameraWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo);
     VkWriteDescriptorSet sceneWrite = VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo);
 
-    VkWriteDescriptorSet setWrites[] = {cameraWrite, sceneWrite};
+    VkWriteDescriptorSet objectWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.passDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo);
 
-    vkUpdateDescriptorSets(this->device, 2, setWrites, 0, nullptr);
+    VkWriteDescriptorSet setWrites[] = {cameraWrite, sceneWrite, objectWrite};
+
+    vkUpdateDescriptorSets(this->device, 3, setWrites, 0, nullptr);
 }
 
 bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
@@ -549,6 +609,7 @@ void VulkanRenderer::cleanup() {
     // Cleanup frameData
     for (FrameData& data : this->frameData) {
         vmaDestroyBuffer(this->allocator, data.cameraBuffer.buffer, data.cameraBuffer.allocation);
+        vmaDestroyBuffer(this->allocator, data.objectBuffer.buffer, data.objectBuffer.allocation);
 
         vkDestroyFence(this->device, data.renderFence, nullptr);
         vkDestroySemaphore(this->device, data.renderSemaphore, nullptr);
@@ -559,6 +620,7 @@ void VulkanRenderer::cleanup() {
 
     vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(this->device, this->globalDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(this->device, this->passDescriptorSetLayout, nullptr);
 
     vmaDestroyAllocator(this->allocator);
 
@@ -572,6 +634,16 @@ void VulkanRenderer::cleanup() {
 }
 
 void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, const Scene& scene) {
+    std::vector<const Actor*> toRender;
+    std::vector<const Actor*> toRenderCollision;
+    // Calculate actors to render
+    {
+        for (const Actor* actor : scene.actors) {
+            if (actor->hasMesh()) toRender.push_back(actor);
+            if (actor->hasCollision()) toRenderCollision.push_back(actor);
+        }
+    }
+
     FrameData& frame = getCurrentFrame();
 
     vkWaitForFences(this->device, 1, &frame.renderFence, true, UINT64_MAX);
@@ -616,94 +688,111 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     {
         vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        glm::vec3 camPos = {0.f, 0.f, -10.f};
-        GpuCameraStruct cameraData = {
-                glm::translate(glm::mat4(1.f), camPos) * glm::mat4_cast(scene.controlledActor->getRotation()),
-                glm::perspective(glm::radians(90.f), 1366.f/768.f, 0.1f, 200.f)
-        };
+        // Camera Buffer
+        {
+            glm::vec3 camPos = {0.f, 0.f, -10.f};
+            GpuCameraData cameraData = {
+                    glm::translate(glm::mat4(1.f), camPos) * glm::mat4_cast(scene.controlledActor->getRotation()),
+                    glm::perspective(glm::radians(90.f), 1366.f / 768.f, 0.1f, 200.f)
+            };
 
-        void* data;
-        vmaMapMemory(this->allocator, frame.cameraBuffer.allocation, &data);
-        memcpy(data, &cameraData, sizeof(GpuCameraStruct));
-        vmaUnmapMemory(this->allocator, frame.cameraBuffer.allocation);
+            void* data;
+            vmaMapMemory(this->allocator, frame.cameraBuffer.allocation, &data);
+            memcpy(data, &cameraData, sizeof(GpuCameraData));
+            vmaUnmapMemory(this->allocator, frame.cameraBuffer.allocation);
+        }
 
-        float framed = (this->currentFrame / 1200.f);
+        // Scene Buffer
+        {
+            float framed = (this->currentFrame / 1200.f);
 
-        sceneParams.ambientColor = { std::sin(framed),0,std::cos(framed),1 };
-        char* sceneData;
-        vmaMapMemory(allocator, sceneParamsBuffer.allocation , (void**)&sceneData);
-        int frameIndex = swapchainIndex;
-        sceneData += padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
-        memcpy(sceneData, &sceneParams, sizeof(GPUSceneData));
-        vmaUnmapMemory(allocator, sceneParamsBuffer.allocation);
+            sceneParams.ambientColor = {std::sin(framed), 0, std::cos(framed), 1};
+            char* sceneData;
+            vmaMapMemory(allocator, sceneParamsBuffer.allocation, (void**) &sceneData);
+            sceneData += padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
+            memcpy(sceneData, &sceneParams, sizeof(GPUSceneData));
+            vmaUnmapMemory(allocator, sceneParamsBuffer.allocation);
+        }
 
-        uint64_t prevVMat = 0;
-        for (const Actor* actor : scene.actors) {
-            if (actor->hasMesh()) {
-                StaticMesh& mesh = *actor->actorMesh;
-                VMaterial vMat = materialList.get(mesh.material->materialId);
-                if (prevVMat != mesh.material->materialId) {
-                    prevVMat = mesh.material->materialId;
+        // Object Buffer
+        {
+            void* objectData;
+            vmaMapMemory(this->allocator, frame.objectBuffer.allocation, &objectData);
+            GpuObjectData* objectSSBO = (GpuObjectData*) objectData;
 
-                    vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
-
-                    uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
-                    vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
-                                            0, 1, &frame.globalDescriptor, 1, &uniformOffset);
-                }
-
-                AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesId);
-                AllocatedBuffer indBuffer = this->bufferList.get(mesh.mesh->indicesId);
-
-                VkDeviceSize offset = 0;
-                vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
-                vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
-
+            for (int i = 0; i < toRender.size(); ++i) {
+                const Actor* actor = toRender[i];
                 glm::mat4 model = glm::translate(glm::mat4(1.f), actor->getPosition());
                 model = glm::scale(model, actor->getScale());
                 model = model * glm::mat4_cast(actor->getRotation());
-
-                MeshPushConstants pushConstants = {model};
-                vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                                   sizeof(pushConstants), &pushConstants);
-
-                vkCmdDrawIndexed(frame.commandBuffer, mesh.mesh->indices.size(), 1, 0, 0, 0);
+                objectSSBO[i].modelMatrix = model;
             }
 
-            if (actor->hasCollision()) {
-                Mesh* mesh = actor->actorCollider->getRenderMesh();
-                VMaterial vMat = materialList.get(collisionMat.materialId);
-
-                if (prevVMat != collisionMat.materialId) {
-                    prevVMat = collisionMat.materialId;
-
-                    vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
-
-                    uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
-                    vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
-                                            0, 1, &frame.globalDescriptor, 1, &uniformOffset);
-                }
-
-                AllocatedBuffer vertBuffer = this->bufferList.get(mesh->verticesId);
-                AllocatedBuffer indBuffer = this->bufferList.get(mesh->indicesId);
-
-                VkDeviceSize offset = 0;
-                vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
-                vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+            for (int i = 0; i < toRenderCollision.size(); ++i) {
+                const Actor* actor = toRenderCollision[i];
 
                 glm::mat4 model = glm::translate(actor->actorCollider->getRenderMeshTransform(), actor->getPosition());
-
-                MeshPushConstants pushConstants = {
-                        model,
-                        actor->actorCollider->isColliding
-                            ? glm::vec4(0.f, 1.f, 0.f, 1.f)
-                            : glm::vec4(1.f, 0.f, 0.f, 1.f)
-                };
-                vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                                   sizeof(pushConstants), &pushConstants);
-
-                vkCmdDrawIndexed(frame.commandBuffer, mesh->indices.size(), 1, 0, 0, 0);
+                objectSSBO[i + toRender.size()].modelMatrix = model;
             }
+
+            vmaUnmapMemory(allocator, frame.objectBuffer.allocation);
+        }
+
+        uint64_t prevVMat = 0;
+        for (int i = 0; i < toRender.size(); ++i) {
+            const Actor* actor = toRender[i];
+            StaticMesh& mesh = *actor->actorMesh;
+            VMaterial vMat = materialList.get(mesh.material->materialId);
+            if (prevVMat != mesh.material->materialId) {
+                prevVMat = mesh.material->materialId;
+
+                vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+
+                uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
+                vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                        0, 1, &frame.globalDescriptor, 1, &uniformOffset);
+                vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                        1, 1, &frame.passDescriptor, 0, nullptr);
+            }
+
+            AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesId);
+            AllocatedBuffer indBuffer = this->bufferList.get(mesh.mesh->indicesId);
+
+            VkDeviceSize offset = 0;
+            vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+            vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+
+            vkCmdDrawIndexed(frame.commandBuffer, mesh.mesh->indices.size(), 1, 0, 0, i);
+        }
+
+        VMaterial vMat = materialList.get(collisionMat.materialId);
+        vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+
+        uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
+        vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                0, 1, &frame.globalDescriptor, 1, &uniformOffset);
+
+        for (int i = 0; i < toRenderCollision.size(); ++i) {
+            const Actor* actor = toRenderCollision[i];
+            Mesh* mesh = actor->actorCollider->getRenderMesh();
+
+            AllocatedBuffer vertBuffer = this->bufferList.get(mesh->verticesId);
+            AllocatedBuffer indBuffer = this->bufferList.get(mesh->indicesId);
+
+            VkDeviceSize offset = 0;
+            vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+            vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+
+            MeshPushConstants pushConstants = {
+                    {},
+                    actor->actorCollider->isColliding
+                        ? glm::vec4(0.f, 1.f, 0.f, 1.f)
+                        : glm::vec4(1.f, 0.f, 0.f, 1.f)
+            };
+            vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                               sizeof(pushConstants), &pushConstants);
+
+            vkCmdDrawIndexed(frame.commandBuffer, mesh->indices.size(), 1, 0, 0, i + toRender.size());
         }
 
         vkCmdEndRenderPass(frame.commandBuffer);
@@ -833,8 +922,11 @@ bool VulkanRenderer::createMaterial(Material& material) {
         pipelineLayoutCreateInfo.pNext = nullptr;
 
         pipelineLayoutCreateInfo.flags = 0;
-        pipelineLayoutCreateInfo.setLayoutCount = 1;
-        pipelineLayoutCreateInfo.pSetLayouts = &this->globalDescriptorSetLayout;
+
+        VkDescriptorSetLayout setLayouts[] = {this->globalDescriptorSetLayout, this->passDescriptorSetLayout};
+
+        pipelineLayoutCreateInfo.setLayoutCount = 2;
+        pipelineLayoutCreateInfo.pSetLayouts = setLayouts;
 
         VkPushConstantRange pushConstantRange;
         pushConstantRange.offset = 0;

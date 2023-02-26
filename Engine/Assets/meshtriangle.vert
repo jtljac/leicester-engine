@@ -1,4 +1,4 @@
-#version 450
+#version 460
 
 layout (push_constant) uniform constants {
     mat4 renderMatrix;
@@ -15,7 +15,16 @@ layout (set = 0, binding = 0) uniform CameraBuffer {
     mat4 proj;
 } cameraData;
 
+struct ObjectData {
+    mat4 model;
+};
+
+layout (std140, set = 1, binding = 0) readonly buffer ObjectBuffer {
+    ObjectData objects[];
+} objectBuffer;
+
 void main(){
-    gl_Position = cameraData.proj * cameraData.view * pushConstants.renderMatrix * vec4(vPosition, 1.0f);
-    outColor = vColour;
+    mat4 modelMatrix = objectBuffer.objects[gl_BaseInstance].model;
+    gl_Position = cameraData.proj * cameraData.view * modelMatrix * vec4(vPosition, 1.0f);
+    outColor = vNormal;
 }

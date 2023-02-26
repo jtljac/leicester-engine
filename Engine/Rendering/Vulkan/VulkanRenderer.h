@@ -54,6 +54,7 @@ class VulkanRenderer : public Renderer {
 
     // Descriptor Set
     VkDescriptorSetLayout globalDescriptorSetLayout;
+    VkDescriptorSetLayout passDescriptorSetLayout;
     VkDescriptorPool descriptorPool;
 
     // Scene data
