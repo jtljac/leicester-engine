@@ -14,41 +14,10 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #include "../VkShortcuts.h"
-#include "Rendering/GPUStructures/GpuStructs.h"
-#include <Collision/SphereCollider.h>
 
-bool VulkanRenderer::initialise(EngineSettings& settings) {
-    Renderer::initialise(settings);
-
-    if (!this->initVulkan(settings)) return false;
-    if (!this->initSwapchain(settings)) return false;
-    if (!this->initRenderpass(settings)) return false;
-    if (!this->initFramebuffers(settings)) return false;
-
-    // Initialise collision visualisation
-    createMaterial(this->collisionMat);
-
-    return true;
-}
-
-void VulkanRenderer::setupScene(Scene& scene) {
-    for (const Actor* actor : scene.actors) {
-        if (actor->hasMesh()) {
-            // Upload mesh
-            registerMesh(actor->actorMesh->mesh);
-
-            // Upload Material
-            createMaterial(*actor->actorMesh->material);
-        }
-        if (actor->hasCollision()) {
-            // Upload collision mesh
-            // TODO: Add flag for this
-            registerMesh(actor->actorCollider->getRenderMesh());
-        }
-    }
-}
-
-VulkanRenderer::~VulkanRenderer() = default;
+/* ========================================= */
+/* Setup                                     */
+/* ========================================= */
 
 void VulkanRenderer::setupGLFWHints() {
     Renderer::setupGLFWHints();
@@ -57,6 +26,29 @@ void VulkanRenderer::setupGLFWHints() {
 
     // Prevent resizing the window
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+}
+
+/* ========================================= */
+/* Initialisation                            */
+/* ========================================= */
+
+bool VulkanRenderer::initialise(EngineSettings& settings) {
+    Renderer::initialise(settings);
+
+    if (!this->initVulkan(settings)) return false;
+    if (!this->initSwapchain(settings)) return false;
+
+    if (!this->initDescriptors(settings)) return false;
+
+    if (!this->initFrameData(settings)) return false;
+
+    if (!this->initRenderpass(settings)) return false;
+    if (!this->initFramebuffers(settings)) return false;
+
+    // Initialise collision visualisation
+    createMaterial(this->collisionMat);
+
+    return true;
 }
 
 bool VulkanRenderer::initVulkan(EngineSettings& settings) {
@@ -161,6 +153,7 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
         this->gpu = vkbDevice.physical_device;
         this->gpuProperties = vkbDevice.physical_device.properties;
 
+        this->graphicsQueueIndex = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
         this->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
     }
 
@@ -177,202 +170,7 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
         }
     }
 
-    this->initDescriptors(settings);
-
-    return this->initFrameData(settings, vkbDevice.get_queue_index(vkb::QueueType::graphics).value());
-}
-
-void VulkanRenderer::initDescriptors(EngineSettings& settings) {
-    // Global Descriptor
-    {
-        const size_t sceneParamBufferSize = settings.bufferCount * padUniformBufferSize(sizeof(GPUSceneData));
-        sceneParamsBuffer = createBuffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-        VkDescriptorSetLayoutBinding cameraBinding = VKShortcuts::createDescriptorSetLayoutBinding(0,
-                                                                                                   VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                                                                                   VK_SHADER_STAGE_VERTEX_BIT);
-        VkDescriptorSetLayoutBinding sceneDataBinding = VKShortcuts::createDescriptorSetLayoutBinding(1,
-                                                                                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-                                                                                                      VK_SHADER_STAGE_VERTEX_BIT |
-                                                                                                      VK_SHADER_STAGE_FRAGMENT_BIT);
-
-        VkDescriptorSetLayoutBinding bindings[] = {cameraBinding, sceneDataBinding};
-
-        VkDescriptorSetLayoutCreateInfo globalDescriptorSetLayoutCreateInfo = {};
-        globalDescriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        globalDescriptorSetLayoutCreateInfo.pNext = nullptr;
-        globalDescriptorSetLayoutCreateInfo.flags = 0;
-
-        globalDescriptorSetLayoutCreateInfo.bindingCount = 2;
-        globalDescriptorSetLayoutCreateInfo.pBindings = bindings;
-        vkCreateDescriptorSetLayout(this->device, &globalDescriptorSetLayoutCreateInfo, nullptr,
-                                    &this->globalDescriptorSetLayout);
-    }
-
-    // Pass Descriptor
-    {
-        VkDescriptorSetLayoutBinding objectBinding = VKShortcuts::createDescriptorSetLayoutBinding(0,
-                                                                                                   VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                                                                                   VK_SHADER_STAGE_VERTEX_BIT);
-
-        VkDescriptorSetLayoutCreateInfo passDescriptorSetLayoutCreateInfo = {};
-        passDescriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        passDescriptorSetLayoutCreateInfo.pNext = nullptr;
-        passDescriptorSetLayoutCreateInfo.flags = 0;
-
-        passDescriptorSetLayoutCreateInfo.bindingCount = 1;
-        passDescriptorSetLayoutCreateInfo.pBindings = &objectBinding;
-        vkCreateDescriptorSetLayout(this->device, &passDescriptorSetLayoutCreateInfo, nullptr,
-                                    &this->passDescriptorSetLayout);
-    }
-
-    std::vector<VkDescriptorPoolSize> sizes = {
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10},
-            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}
-    };
-
-    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
-    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.pNext = nullptr;
-
-    descriptorPoolCreateInfo.flags = 0;
-    descriptorPoolCreateInfo.maxSets = 10;
-    descriptorPoolCreateInfo.poolSizeCount = (uint32_t) sizes.size();
-    descriptorPoolCreateInfo.pPoolSizes = sizes.data();
-
-    vkCreateDescriptorPool(this->device, &descriptorPoolCreateInfo, nullptr, &this->descriptorPool);
-}
-
-bool VulkanRenderer::initFrameData(EngineSettings& settings, unsigned int graphicsQueueIndex) {
-    frameData.resize(settings.bufferCount);
-
-    for (int i = 0; i < frameData.size(); ++i) {
-        FrameData& data = this->frameData[i];
-        if (!initFrameDataGraphicsPools(settings, data, graphicsQueueIndex)) return false;
-
-        if (!initFrameDataSyncObjects(settings, data)) return false;
-
-        initFrameDataDescriptorSets(settings, i, data);
-    }
     return true;
-}
-
-bool VulkanRenderer::initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData, unsigned int graphicsQueueIndex) {
-    VkCommandPoolCreateInfo commandPoolCreateInfo = {};
-    commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    commandPoolCreateInfo.pNext = nullptr;
-
-    commandPoolCreateInfo.queueFamilyIndex = graphicsQueueIndex;
-    commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.pNext = nullptr;
-
-    commandBufferAllocateInfo.commandBufferCount = 1;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-    if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &frameData.commandPool) != VK_SUCCESS) {
-        Logger::error("Failed to create command pool");
-        return false;
-    }
-
-    commandBufferAllocateInfo.commandPool = frameData.commandPool;
-    if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &frameData.commandBuffer) != VK_SUCCESS) {
-        Logger::error("Failed to create command buffer");
-        return false;
-    }
-
-    return true;
-}
-
-bool VulkanRenderer::initFrameDataSyncObjects(EngineSettings& settings, FrameData& frameData) {
-    // Fence
-    {
-        VkFenceCreateInfo fenceCreateInfo = {};
-        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceCreateInfo.pNext = nullptr;
-        fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &frameData.renderFence) != VK_SUCCESS) {
-            Logger::error("Failed to create fence");
-            return false;
-        }
-    }
-    // Semaphores
-    {
-        VkSemaphoreCreateInfo semaphoreCreateInfo = {};
-        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        semaphoreCreateInfo.pNext = nullptr;
-        semaphoreCreateInfo.flags = 0;
-
-        if (vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &frameData.renderSemaphore) != VK_SUCCESS
-            || vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &frameData.presentSemaphore) != VK_SUCCESS) {
-            Logger::error("Failed to create semaphore");
-            return false;
-        }
-    }
-    return true;
-}
-
-void
-VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, unsigned int frameIndex, FrameData& frameData) {
-    constexpr int maxObjectCount = 10000;
-
-    frameData.cameraBuffer = createBuffer(sizeof(GpuCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-    frameData.objectBuffer = createBuffer(sizeof(GpuObjectData) * maxObjectCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-    // Global Descriptor
-    {
-        VkDescriptorSetAllocateInfo globalDescriptorSetAllocateInfo = {};
-        globalDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        globalDescriptorSetAllocateInfo.pNext = nullptr;
-
-        globalDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
-        globalDescriptorSetAllocateInfo.descriptorSetCount = 1;
-        globalDescriptorSetAllocateInfo.pSetLayouts = &this->globalDescriptorSetLayout;
-
-        vkAllocateDescriptorSets(this->device, &globalDescriptorSetAllocateInfo, &frameData.globalDescriptor);
-    }
-
-    // Pass Descriptor
-    {
-        VkDescriptorSetAllocateInfo passDescriptorSetAllocateInfo = {};
-        passDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        passDescriptorSetAllocateInfo.pNext = nullptr;
-
-        passDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
-        passDescriptorSetAllocateInfo.descriptorSetCount = 1;
-        passDescriptorSetAllocateInfo.pSetLayouts = &this->passDescriptorSetLayout;
-
-        vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.passDescriptor);
-    }
-
-    VkDescriptorBufferInfo cameraInfo;
-    cameraInfo.buffer = frameData.cameraBuffer.buffer;
-    cameraInfo.offset = 0;
-    cameraInfo.range = sizeof(GpuCameraData);
-
-    VkDescriptorBufferInfo sceneInfo;
-    sceneInfo.buffer = sceneParamsBuffer.buffer;
-    sceneInfo.offset = 0;
-    sceneInfo.range = sizeof(GPUSceneData);
-
-    VkDescriptorBufferInfo objectInfo;
-    objectInfo.buffer = frameData.objectBuffer.buffer;
-    objectInfo.offset = 0;
-    objectInfo.range = sizeof(GpuObjectData) * maxObjectCount;
-
-    VkWriteDescriptorSet cameraWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo);
-    VkWriteDescriptorSet sceneWrite = VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo);
-
-    VkWriteDescriptorSet objectWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.passDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo);
-
-    VkWriteDescriptorSet setWrites[] = {cameraWrite, sceneWrite, objectWrite};
-
-    vkUpdateDescriptorSets(this->device, 3, setWrites, 0, nullptr);
 }
 
 bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
@@ -450,27 +248,207 @@ bool VulkanRenderer::initSwapchainDepthBuffer(EngineSettings& settings, Swapchai
     return true;
 }
 
-bool VulkanRenderer::initFramebuffers(EngineSettings& settings) {
-    VkFramebufferCreateInfo framebufferCreateInfo = {};
-    framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferCreateInfo.pNext = nullptr;
+bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
+    // Global Descriptor
+    {
+        const size_t sceneParamBufferSize = settings.bufferCount * padUniformBufferSize(sizeof(GPUSceneData));
+        sceneParamsBuffer = createBuffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-    framebufferCreateInfo.renderPass = this->renderPass;
-    framebufferCreateInfo.attachmentCount = 2;
-    framebufferCreateInfo.width = settings.windowWidth;
-    framebufferCreateInfo.height = settings.windowHeight;
-    framebufferCreateInfo.layers = 1;
+        std::array<VkDescriptorSetLayoutBinding, 2> bindings{{
+            VKShortcuts::createDescriptorSetLayoutBinding(0,
+                                                          VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                                          VK_SHADER_STAGE_VERTEX_BIT),
+            VKShortcuts::createDescriptorSetLayoutBinding(1,
+                                                          VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+                                                          VK_SHADER_STAGE_VERTEX_BIT |
+                                                          VK_SHADER_STAGE_FRAGMENT_BIT)
+        }};
 
-    for (SwapchainData& swapchain : this->swapchainData) {
-        VkImageView attachments[2] = {swapchain.swapchainImageView, swapchain.depthImageView};
-        framebufferCreateInfo.pAttachments = attachments;
-        if (vkCreateFramebuffer(this->device, &framebufferCreateInfo, nullptr, &swapchain.framebuffer) != VK_SUCCESS) {
-            Logger::error("Failed to create framebuffer");
+        VkDescriptorSetLayoutCreateInfo globalDescriptorSetLayoutCreateInfo = {};
+        globalDescriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        globalDescriptorSetLayoutCreateInfo.pNext = nullptr;
+        globalDescriptorSetLayoutCreateInfo.flags = 0;
+
+        globalDescriptorSetLayoutCreateInfo.bindingCount = bindings.size();
+        globalDescriptorSetLayoutCreateInfo.pBindings = bindings.data();
+        if (vkCreateDescriptorSetLayout(this->device, &globalDescriptorSetLayoutCreateInfo, nullptr,
+                                    &this->globalDescriptorSetLayout) != VK_SUCCESS) {
+            Logger::error("Failed to create globalDescriptorSetLayout");
             return false;
         }
     }
 
+    // Pass Descriptor
+    {
+        std::array<VkDescriptorSetLayoutBinding, 1> bindings{{
+            VKShortcuts::createDescriptorSetLayoutBinding(0,
+                                                          VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                                          VK_SHADER_STAGE_VERTEX_BIT)
+        }};
+
+        VkDescriptorSetLayoutCreateInfo passDescriptorSetLayoutCreateInfo = {};
+        passDescriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        passDescriptorSetLayoutCreateInfo.pNext = nullptr;
+        passDescriptorSetLayoutCreateInfo.flags = 0;
+
+        passDescriptorSetLayoutCreateInfo.bindingCount = bindings.size();
+        passDescriptorSetLayoutCreateInfo.pBindings = bindings.data();
+        if (vkCreateDescriptorSetLayout(this->device, &passDescriptorSetLayoutCreateInfo, nullptr,
+                                    &this->passDescriptorSetLayout) != VK_SUCCESS){
+            Logger::error("Failed to create passDescriptorSetLayout");
+            return false;
+        }
+    }
+
+    std::vector<VkDescriptorPoolSize> sizes = {
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}
+    };
+
+    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
+    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptorPoolCreateInfo.pNext = nullptr;
+
+    descriptorPoolCreateInfo.flags = 0;
+    descriptorPoolCreateInfo.maxSets = 10;
+    descriptorPoolCreateInfo.poolSizeCount = (uint32_t) sizes.size();
+    descriptorPoolCreateInfo.pPoolSizes = sizes.data();
+
+    vkCreateDescriptorPool(this->device, &descriptorPoolCreateInfo, nullptr, &this->descriptorPool);
+
     return true;
+}
+
+bool VulkanRenderer::initFrameData(EngineSettings& settings) {
+    frameData.resize(settings.bufferCount);
+
+    for (int i = 0; i < frameData.size(); ++i) {
+        FrameData& data = this->frameData[i];
+        if (!initFrameDataGraphicsPools(settings, data)) return false;
+
+        if (!initFrameDataSyncObjects(settings, data)) return false;
+
+        initFrameDataDescriptorSets(settings, data);
+    }
+    return true;
+}
+
+bool VulkanRenderer::initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData) {
+    VkCommandPoolCreateInfo commandPoolCreateInfo = {};
+    commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    commandPoolCreateInfo.pNext = nullptr;
+
+    commandPoolCreateInfo.queueFamilyIndex = this->graphicsQueueIndex;
+    commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAllocateInfo.pNext = nullptr;
+
+    commandBufferAllocateInfo.commandBufferCount = 1;
+    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+    if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &frameData.commandPool) != VK_SUCCESS) {
+        Logger::error("Failed to create command pool");
+        return false;
+    }
+
+    commandBufferAllocateInfo.commandPool = frameData.commandPool;
+    if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &frameData.commandBuffer) != VK_SUCCESS) {
+        Logger::error("Failed to create command buffer");
+        return false;
+    }
+
+    return true;
+}
+
+bool VulkanRenderer::initFrameDataSyncObjects(EngineSettings& settings, FrameData& frameData) {
+    // Fence
+    {
+        VkFenceCreateInfo fenceCreateInfo = {};
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceCreateInfo.pNext = nullptr;
+        fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &frameData.renderFence) != VK_SUCCESS) {
+            Logger::error("Failed to create fence");
+            return false;
+        }
+    }
+    // Semaphores
+    {
+        VkSemaphoreCreateInfo semaphoreCreateInfo = {};
+        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        semaphoreCreateInfo.pNext = nullptr;
+        semaphoreCreateInfo.flags = 0;
+
+        if (vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &frameData.renderSemaphore) != VK_SUCCESS
+            || vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &frameData.presentSemaphore) != VK_SUCCESS) {
+            Logger::error("Failed to create semaphore");
+            return false;
+        }
+    }
+    return true;
+}
+
+void
+VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData) {
+    constexpr int maxObjectCount = 10000;
+
+    frameData.cameraBuffer = createBuffer(sizeof(GpuCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    frameData.objectBuffer = createBuffer(sizeof(GpuObjectData) * maxObjectCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+    // Global Descriptor
+    {
+        VkDescriptorSetAllocateInfo globalDescriptorSetAllocateInfo = {};
+        globalDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        globalDescriptorSetAllocateInfo.pNext = nullptr;
+
+        globalDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
+        globalDescriptorSetAllocateInfo.descriptorSetCount = 1;
+        globalDescriptorSetAllocateInfo.pSetLayouts = &this->globalDescriptorSetLayout;
+
+        vkAllocateDescriptorSets(this->device, &globalDescriptorSetAllocateInfo, &frameData.globalDescriptor);
+    }
+
+    // Pass Descriptor
+    {
+        VkDescriptorSetAllocateInfo passDescriptorSetAllocateInfo = {};
+        passDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        passDescriptorSetAllocateInfo.pNext = nullptr;
+
+        passDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
+        passDescriptorSetAllocateInfo.descriptorSetCount = 1;
+        passDescriptorSetAllocateInfo.pSetLayouts = &this->passDescriptorSetLayout;
+
+        vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.passDescriptor);
+    }
+
+    VkDescriptorBufferInfo cameraInfo;
+    cameraInfo.buffer = frameData.cameraBuffer.buffer;
+    cameraInfo.offset = 0;
+    cameraInfo.range = sizeof(GpuCameraData);
+
+    VkDescriptorBufferInfo sceneInfo;
+    sceneInfo.buffer = sceneParamsBuffer.buffer;
+    sceneInfo.offset = 0;
+    sceneInfo.range = sizeof(GPUSceneData);
+
+    VkDescriptorBufferInfo objectInfo;
+    objectInfo.buffer = frameData.objectBuffer.buffer;
+    objectInfo.offset = 0;
+    objectInfo.range = sizeof(GpuObjectData) * maxObjectCount;
+
+    VkWriteDescriptorSet cameraWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo);
+    VkWriteDescriptorSet sceneWrite = VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo);
+
+    VkWriteDescriptorSet objectWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.passDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo);
+
+    VkWriteDescriptorSet setWrites[] = {cameraWrite, sceneWrite, objectWrite};
+
+    vkUpdateDescriptorSets(this->device, 3, setWrites, 0, nullptr);
 }
 
 bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
@@ -571,6 +549,33 @@ bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
     return true;
 }
 
+bool VulkanRenderer::initFramebuffers(EngineSettings& settings) {
+    VkFramebufferCreateInfo framebufferCreateInfo = {};
+    framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferCreateInfo.pNext = nullptr;
+
+    framebufferCreateInfo.renderPass = this->renderPass;
+    framebufferCreateInfo.attachmentCount = 2;
+    framebufferCreateInfo.width = settings.windowWidth;
+    framebufferCreateInfo.height = settings.windowHeight;
+    framebufferCreateInfo.layers = 1;
+
+    for (SwapchainData& swapchain : this->swapchainData) {
+        VkImageView attachments[2] = {swapchain.swapchainImageView, swapchain.depthImageView};
+        framebufferCreateInfo.pAttachments = attachments;
+        if (vkCreateFramebuffer(this->device, &framebufferCreateInfo, nullptr, &swapchain.framebuffer) != VK_SUCCESS) {
+            Logger::error("Failed to create framebuffer");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/* ========================================= */
+/* Cleanup                                   */
+/* ========================================= */
+
 void VulkanRenderer::cleanupSwapchain() {
     vkDeviceWaitIdle(this->device);
 
@@ -632,6 +637,10 @@ void VulkanRenderer::cleanup() {
 
     Renderer::cleanup();
 }
+
+/* ========================================= */
+/* Rendering                                 */
+/* ========================================= */
 
 void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, const Scene& scene) {
     std::vector<const Actor*> toRender;
@@ -834,6 +843,10 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     ++currentFrame;
 }
 
+/* ========================================= */
+/* Internal Data Management                  */
+/* ========================================= */
+
 bool VulkanRenderer::loadShader(const std::string& path, VkShaderModule* outShaderModule) {
     std::ifstream shaderFile(path, std::ios::ate | std::ios::binary);
 
@@ -969,8 +982,25 @@ bool VulkanRenderer::createMaterial(Material& material) {
     return true;
 }
 
-FrameData& VulkanRenderer::getCurrentFrame() {
-    return frameData[currentFrame % settings->bufferCount];
+/* ========================================= */
+/* Resource Management                       */
+/* ========================================= */
+
+void VulkanRenderer::setupScene(Scene& scene) {
+    for (const Actor* actor : scene.actors) {
+        if (actor->hasMesh()) {
+            // Upload mesh
+            registerMesh(actor->actorMesh->mesh);
+
+            // Upload Material
+            createMaterial(*actor->actorMesh->material);
+        }
+        if (actor->hasCollision()) {
+            // Upload collision mesh
+            // TODO: Add flag for this
+            registerMesh(actor->actorCollider->getRenderMesh());
+        }
+    }
 }
 
 bool VulkanRenderer::registerMesh(Mesh* mesh) {
@@ -987,6 +1017,14 @@ bool VulkanRenderer::registerMaterial(Material* material) {
     createMaterial(*material);
 
     return true;
+}
+
+/* ========================================= */
+/* Util                                      */
+/* ========================================= */
+
+FrameData& VulkanRenderer::getCurrentFrame() {
+    return frameData[currentFrame % settings->bufferCount];
 }
 
 size_t VulkanRenderer::padUniformBufferSize(size_t originalSize) {

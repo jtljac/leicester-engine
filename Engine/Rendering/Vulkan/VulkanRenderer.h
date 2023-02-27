@@ -15,13 +15,16 @@
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 
-#include "../Renderer.h"
+#include <Utils/IdTrackedResource.h>
+#include <Rendering/GPUStructures/GpuStructs.h>
+#include <Scene/Scene.h>
 #include <Mesh/Mesh.h>
+#include <Mesh/StaticMesh.h>
+
+#include "../Renderer.h"
 #include "DeletionQueue.h"
 #include "AllocationStructures.h"
-#include "Utils/IdTrackedResource.h"
 #include "VMaterial.h"
-#include "Mesh/StaticMesh.h"
 #include "FrameData.h"
 #include "Scene/Scene.h"
 
@@ -34,12 +37,13 @@ class VulkanRenderer : public Renderer {
     VkSurfaceKHR surface;                       // Window surface handle
 
     // GPU info
-    VkPhysicalDeviceProperties gpuProperties;
+    VkPhysicalDeviceProperties gpuProperties;   // Info about the current GPU Device
 
     // Memory Management
     VmaAllocator allocator;         // The GPU memory allocator
 
     // Queues
+    uint32_t graphicsQueueIndex;    // The queue index used for the graphics queue
     VkQueue graphicsQueue;          // The queue used for graphics commands
 
     // Swapchain
@@ -113,7 +117,7 @@ private:
      * Setup the descriptors used by the pipelines
      * @param settings the engine settings
      */
-    void initDescriptors(EngineSettings& settings);
+    bool initDescriptors(EngineSettings& settings);
 
     /**
      * Initialises the frameData objects
@@ -121,7 +125,7 @@ private:
      * @param graphicsQueueIndex the index of the graphics queue used for the command pools
      * @return True if successful
      */
-    bool initFrameData(EngineSettings& settings, unsigned int graphicsQueueIndex);
+    bool initFrameData(EngineSettings& settings);
 
     /**
      * Initialises the graphics pools in the provided FrameData
@@ -131,7 +135,7 @@ private:
      * @param graphicsQueueIndex the index of the graphics queue used for the command pools
      * @return True if successful
      */
-    bool initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData, unsigned int graphicsQueueIndex);
+    bool initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData);
 
     /**
      * Initialise the semaphores and fences of the given FrameData
@@ -149,7 +153,7 @@ private:
      * @param frameData the FrameData object being populated
      * @return True if successful
      */
-    void initFrameDataDescriptorSets(EngineSettings& settings, unsigned int frameIndex, FrameData& frameData);
+    void initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData);
 
     /**
      * Sets up the swapchainHandle
@@ -234,16 +238,16 @@ protected:
     void setupGLFWHints() override;
 public:
     VulkanRenderer() = default;
-    ~VulkanRenderer() override;
+    ~VulkanRenderer() override = default;
 
     // Overrides
     bool initialise(EngineSettings& settings) override;
-    void setupScene(Scene& scene) override;
     void drawFrame(double deltaTime, double gameTime, const Scene& scene) override;
     void cleanup() override;
 
+    // Resource Management
+    void setupScene(Scene& scene) override;
     bool registerMesh(Mesh* mesh) override;
-
     bool registerMaterial(Material* material) override;
 };
 
