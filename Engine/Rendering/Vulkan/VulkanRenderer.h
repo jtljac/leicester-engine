@@ -20,6 +20,7 @@
 #include <Scene/Scene.h>
 #include <Mesh/Mesh.h>
 #include <Mesh/StaticMesh.h>
+#include <Texture/Texture.h>
 
 #include "../Renderer.h"
 #include "DeletionQueue.h"
@@ -236,11 +237,27 @@ private:
     AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO);
 
     /**
+     * Allocate an image on the GPU
+     * @param imageCreateInfo The image info
+     * @param flags The allocation flags
+     * @param memoryUsage The VMA Memory usage flags
+     * @return The allocated image representing the allocated gpu image
+     */
+    AllocatedImage createImage(VkImageCreateInfo& imageCreateInfo, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO);
+
+    /**
      * Upload a mesh to the GPU
      * Sets the vertices and indices ids of the mesh
      * @param mesh The mesh to upload
      */
     void uploadMesh(Mesh& mesh);
+
+    /**
+     * Upload a texture to the GPU
+     * Sets the textureId of the texture
+     * @param texture The texture to upload
+     */
+    void uploadTexture(Texture& texture);
 
     /**
      * Uploads a material to the GPU

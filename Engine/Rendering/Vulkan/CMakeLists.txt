@@ -8,4 +8,5 @@ target_sources(leicester-engine PRIVATE
         Source/VMaterial.cpp
         Source/FrameData.cpp
         Source/VkShortcuts.cpp
+        Source/VTextureUtil.cpp
 )

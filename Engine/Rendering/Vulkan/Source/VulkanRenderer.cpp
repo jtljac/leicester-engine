@@ -15,6 +15,8 @@
 #include "vk_mem_alloc.h"
 #include "../VkShortcuts.h"
 
+#include <Rendering/Vulkan/VTextureUtil.h>
+
 /* ========================================= */
 /* Setup                                     */
 /* ========================================= */
@@ -354,13 +356,13 @@ bool VulkanRenderer::initFrameDataGraphicsPools(EngineSettings& settings, FrameD
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
     if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &frameData.commandPool) != VK_SUCCESS) {
-        Logger::error("Failed to create command pool");
+        Logger::error("Failed to create frameData command pool");
         return false;
     }
 
     commandBufferAllocateInfo.commandPool = frameData.commandPool;
     if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &frameData.commandBuffer) != VK_SUCCESS) {
-        Logger::error("Failed to create command buffer");
+        Logger::error("Failed to create frameData command buffer");
         return false;
     }
 
@@ -376,7 +378,7 @@ bool VulkanRenderer::initFrameDataSyncObjects(EngineSettings& settings, FrameDat
         fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
         if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &frameData.renderFence) != VK_SUCCESS) {
-            Logger::error("Failed to create fence");
+            Logger::error("Failed to create frameData fence");
             return false;
         }
     }
@@ -389,7 +391,7 @@ bool VulkanRenderer::initFrameDataSyncObjects(EngineSettings& settings, FrameDat
 
         if (vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &frameData.renderSemaphore) != VK_SUCCESS
             || vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &frameData.presentSemaphore) != VK_SUCCESS) {
-            Logger::error("Failed to create semaphore");
+            Logger::error("Failed to create frameData semaphore");
             return false;
         }
     }
@@ -651,10 +653,14 @@ void VulkanRenderer::cleanup() {
     }
     bufferList.clear();
 
+    for (const auto& allocatedImage: imageList.getMap()) {
+        vmaDestroyImage(this->allocator, allocatedImage.second.image, allocatedImage.second.allocation);
+    }
+
     for (auto& vMat: materialList.getMap()) {
         vMat.second.deleteMaterial(device);
     }
-    bufferList.clear();
+    materialList.clear();
 
     deletionQueue.flush(this->device);
 
@@ -988,6 +994,19 @@ AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlag
     return allocatedBuffer;
 }
 
+AllocatedImage VulkanRenderer::createImage(VkImageCreateInfo& imageCreateInfo, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage) {
+    VkBufferCreateInfo bufferCreateInfo = {};
+    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCreateInfo.pNext = nullptr;
+
+    VmaAllocationCreateInfo allocationCreateInfo = {};
+    allocationCreateInfo.flags = flags;
+    allocationCreateInfo.usage = memoryUsage;
+
+    AllocatedImage allocatedImage;
+    vmaCreateImage(this->allocator, &imageCreateInfo, &allocationCreateInfo, &allocatedImage.image, &allocatedImage.allocation, nullptr);
+}
+
 void VulkanRenderer::uploadMesh(Mesh& mesh) {
     const size_t verticesSize = mesh.vertices.size() * sizeof(Vertex);
     const size_t indicesSize = mesh.indices.size() * sizeof(uint32_t);
@@ -1032,6 +1051,108 @@ void VulkanRenderer::uploadMesh(Mesh& mesh) {
         copy.srcOffset = verticesSize;
         copy.size = indicesSize;
         vkCmdCopyBuffer(commandBuffer, stagingBuffer.buffer, indexBuffer.buffer, 1, &copy);
+
+        return VK_SUCCESS;
+    });
+
+    vmaDestroyBuffer(this->allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+}
+
+void VulkanRenderer::uploadTexture(Texture& texture) {
+    size_t bufferSize = texture.size();
+    AllocatedBuffer stagingBuffer = this->createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+    );
+
+    // Transfer data to staging buffer
+    void* data;
+    vmaMapMemory(this->allocator, stagingBuffer.allocation, &data);
+    memcpy(data, texture.pixels.data(), bufferSize);
+    vmaUnmapMemory(this->allocator, stagingBuffer.allocation);
+
+    VkFormat format = textureFormatToVkFormat(texture.format);
+    VkExtent3D textureExtent{
+            (uint32_t) texture.width,
+            (uint32_t) texture.height,
+            1
+    };
+
+    VkImageCreateInfo imageCreateInfo = {};
+    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.pNext = nullptr;
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.format = format;
+    imageCreateInfo.extent = textureExtent;
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+    AllocatedImage image = createImage(imageCreateInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
+
+    texture.textureId = imageList.insert(image);
+
+    executeTransfer([&](VkCommandBuffer commandBuffer) {
+        VkImageSubresourceRange range{
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0,
+            1,
+            0,
+            1
+        };
+
+        VkImageMemoryBarrier transferBarrier {
+            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            nullptr,
+            0,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_QUEUE_FAMILY_IGNORED,
+            VK_QUEUE_FAMILY_IGNORED,
+            image.image,
+            range
+        };
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                             nullptr, 0, nullptr, 1, &transferBarrier);
+
+        VkBufferImageCopy copy{
+            0,
+            0,
+            0,
+            {
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                0,
+                0,
+                1
+            },
+            {},
+            textureExtent
+        };
+
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+        VkImageMemoryBarrier readableBarrier {
+                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                nullptr,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_ACCESS_SHADER_READ_BIT,
+
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                transferQueueIndex,
+                graphicsQueueIndex,
+                image.image,
+                range
+        };
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+                             nullptr, 0, nullptr, 1, &readableBarrier);
 
         return VK_SUCCESS;
     });
