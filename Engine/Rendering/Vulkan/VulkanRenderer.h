@@ -30,40 +30,41 @@
 
 class VulkanRenderer : public Renderer {
     // Vulkan Handles
-    VkInstance vInstance;                       // Vulkan instance handle
-    VkDebugUtilsMessengerEXT debugMessenger;    // Debug output handle
-    VkPhysicalDevice gpu;                       // Physical GPU Device Handle
-    VkDevice device;                            // Device Handle for commands
-    VkSurfaceKHR surface;                       // Window surface handle
+    VkInstance vInstance = VK_NULL_HANDLE;                       // Vulkan instance handle
+    VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;    // Debug output handle
+    VkPhysicalDevice gpu = VK_NULL_HANDLE;                       // Physical GPU Device Handle
+    VkDevice device = VK_NULL_HANDLE;                            // Device Handle for commands
+    VkSurfaceKHR surface = VK_NULL_HANDLE;                       // Window surface handle
 
     // GPU info
     VkPhysicalDeviceProperties gpuProperties;   // Info about the current GPU Device
 
     // Memory Management
-    VmaAllocator allocator;         // The GPU memory allocator
+    VmaAllocator allocator = VK_NULL_HANDLE;    // The GPU memory allocator
 
     // Queues
-    uint32_t graphicsQueueIndex;    // The queue index used for the graphics queue
-    VkQueue graphicsQueue;          // The queue used for graphics commands
+    uint32_t graphicsQueueIndex;                // The queue index used for the graphics queue
+    VkQueue graphicsQueue = VK_NULL_HANDLE;     // The queue used for graphics commands
+
 
     // Swapchain
-    VkSwapchainKHR swapchainHandle;     // Swap Chain handle
-    VkFormat swapchainImageFormat;      // The format of the swapchainHandle
+    VkSwapchainKHR swapchainHandle = VK_NULL_HANDLE;    // Swap Chain handle
+    VkFormat swapchainImageFormat;                      // The format of the swapchainHandle
 
     // Depth Buffer
-    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;    // The format of the depth buffer
+    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;        // The format of the depth buffer
 
     // Renderpass
-    VkRenderPass renderPass;        // The renderpass handle
+    VkRenderPass renderPass = VK_NULL_HANDLE;           // The renderpass handle
 
     // Descriptor Set
-    VkDescriptorSetLayout globalDescriptorSetLayout;
-    VkDescriptorSetLayout passDescriptorSetLayout;
-    VkDescriptorPool descriptorPool;
+    VkDescriptorSetLayout globalDescriptorSetLayout = VK_NULL_HANDLE;   // Descriptor set layout for global data
+    VkDescriptorSetLayout passDescriptorSetLayout = VK_NULL_HANDLE;     // Descriptor set layout for pass data
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;                   // Pool of which descriptor sets are allocated to
 
     // Scene data
-    GPUSceneData sceneParams;
-    AllocatedBuffer sceneParamsBuffer;
+    GPUSceneData sceneParams{};
+    AllocatedBuffer sceneParamsBuffer{};
 
     // Frame Data
     unsigned int currentFrame = 0;              // The current frame being rendered
