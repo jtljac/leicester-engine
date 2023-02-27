@@ -39,8 +39,8 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     if (!this->initSwapchain(settings)) return false;
 
     if (!this->initDescriptors(settings)) return false;
-
     if (!this->initFrameData(settings)) return false;
+    if (!this->initTransferContext(settings)) return false;
 
     if (!this->initRenderpass(settings)) return false;
     if (!this->initFramebuffers(settings)) return false;
@@ -155,6 +155,8 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
 
         this->graphicsQueueIndex = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
         this->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+        this->transferQueueIndex = vkbDevice.get_queue_index(vkb::QueueType::transfer).value();
+        this->transferQueue = vkbDevice.get_queue(vkb::QueueType::transfer).value();
     }
 
     // VMA Allocator
@@ -252,8 +254,9 @@ bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
     // Global Descriptor
     {
         const size_t sceneParamBufferSize = settings.bufferCount * padUniformBufferSize(sizeof(GPUSceneData));
-        sceneParamsBuffer = createBuffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
+        sceneParamsBuffer = createBuffer(sceneParamBufferSize,
+                                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
         std::array<VkDescriptorSetLayoutBinding, 2> bindings{{
             VKShortcuts::createDescriptorSetLayoutBinding(0,
@@ -397,8 +400,12 @@ void
 VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData) {
     constexpr int maxObjectCount = 10000;
 
-    frameData.cameraBuffer = createBuffer(sizeof(GpuCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-    frameData.objectBuffer = createBuffer(sizeof(GpuObjectData) * maxObjectCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    frameData.cameraBuffer = createBuffer(sizeof(GpuCameraData),
+                                          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                          VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    frameData.objectBuffer = createBuffer(sizeof(GpuObjectData) * maxObjectCount,
+                                          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                          VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
     // Global Descriptor
     {
@@ -450,6 +457,50 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
 
     vkUpdateDescriptorSets(this->device, 3, setWrites, 0, nullptr);
 }
+
+bool VulkanRenderer::initTransferContext(EngineSettings& settings) {
+    // Fence
+    {
+        VkFenceCreateInfo fenceCreateInfo = {};
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceCreateInfo.pNext = nullptr;
+
+        if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &transferContext.uploadFence) != VK_SUCCESS) {
+            Logger::error("Failed to create transferContext fence");
+            return false;
+        }
+    }
+
+    // Command Pool
+    {
+        VkCommandPoolCreateInfo commandPoolCreateInfo = {};
+        commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        commandPoolCreateInfo.pNext = nullptr;
+
+        commandPoolCreateInfo.queueFamilyIndex = this->transferQueueIndex;
+        commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+        if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &transferContext.commandPool) != VK_SUCCESS) {
+            Logger::error("Failed to create command pool");
+            return false;
+        }
+
+        VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+        commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        commandBufferAllocateInfo.pNext = nullptr;
+
+        commandBufferAllocateInfo.commandBufferCount = 1;
+        commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        commandBufferAllocateInfo.commandPool = transferContext.commandPool;
+        if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &transferContext.commandBuffer) != VK_SUCCESS) {
+            Logger::error("Failed to create transferContext command buffer");
+            return false;
+        }
+    }
+
+    return true;
+}
+
 
 bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
     VkAttachmentDescription colourAttachment = {};
@@ -847,6 +898,44 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
 /* Internal Data Management                  */
 /* ========================================= */
 
+VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer)>&& function) {
+    VkCommandBufferBeginInfo commandBufferBeginInfo{};
+    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    commandBufferBeginInfo.pNext = nullptr;
+    commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    // Command Buffer
+    VkResult result;
+    {
+        vkBeginCommandBuffer(transferContext.commandBuffer, &commandBufferBeginInfo);
+        result = function(transferContext.commandBuffer);
+        vkEndCommandBuffer(transferContext.commandBuffer);
+    }
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = nullptr;
+
+    submitInfo.waitSemaphoreCount = 0;
+    submitInfo.pWaitSemaphores = nullptr;
+    submitInfo.signalSemaphoreCount = 0;
+    submitInfo.pSignalSemaphores = nullptr;
+
+    submitInfo.pWaitDstStageMask = nullptr;
+
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &transferContext.commandBuffer;
+
+    vkQueueSubmit(transferQueue, 1, &submitInfo, transferContext.uploadFence);
+
+    vkWaitForFences(this->device, 1, &transferContext.uploadFence, true, UINT64_MAX);
+    vkResetFences(this->device, 1, &transferContext.uploadFence);
+
+    vkResetCommandPool(this->device, transferContext.commandPool, 0);
+
+    return result;
+}
+
 bool VulkanRenderer::loadShader(const std::string& path, VkShaderModule* outShaderModule) {
     std::ifstream shaderFile(path, std::ios::ate | std::ios::binary);
 
@@ -877,7 +966,7 @@ bool VulkanRenderer::loadShader(const std::string& path, VkShaderModule* outShad
     return true;
 }
 
-AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
+AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage) {
     VkBufferCreateInfo bufferCreateInfo = {};
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferCreateInfo.pNext = nullptr;
@@ -886,6 +975,7 @@ AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlag
     bufferCreateInfo.usage = usage;
 
     VmaAllocationCreateInfo allocationCreateInfo = {};
+    allocationCreateInfo.flags = flags;
     allocationCreateInfo.usage = memoryUsage;
 
     AllocatedBuffer allocatedBuffer;
@@ -899,21 +989,56 @@ AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlag
 }
 
 void VulkanRenderer::uploadMesh(Mesh& mesh) {
-    AllocatedBuffer allocatedBuffer = this->createBuffer(mesh.vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-    mesh.verticesId = this->bufferList.insert(allocatedBuffer);
+    const size_t verticesSize = mesh.vertices.size() * sizeof(Vertex);
+    const size_t indicesSize = mesh.indices.size() * sizeof(uint32_t);
 
+    AllocatedBuffer stagingBuffer = this->createBuffer(
+            verticesSize + indicesSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+    );
+
+    // Transfer data to staging buffer
     void* data;
-    vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
-    memcpy(data, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
-    vmaUnmapMemory(this->allocator, allocatedBuffer.allocation);
+    vmaMapMemory(this->allocator, stagingBuffer.allocation, &data);
+    memcpy(data, mesh.vertices.data(), verticesSize);
+    memcpy((char*) data + verticesSize, mesh.indices.data(), indicesSize);  // Dirty pointer arithmetic
+    vmaUnmapMemory(this->allocator, stagingBuffer.allocation);
 
-    allocatedBuffer = this->createBuffer(mesh.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    AllocatedBuffer vertexBuffer = this->createBuffer(
+            verticesSize,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT
+    );
+    AllocatedBuffer indexBuffer = this->createBuffer(
+            indicesSize,
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT
+    );
 
-    mesh.indicesId = this->bufferList.insert(allocatedBuffer);
-    vmaMapMemory(this->allocator, allocatedBuffer.allocation, &data);
-    memcpy(data, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
-    vmaUnmapMemory(this->allocator, allocatedBuffer.allocation);
+    mesh.verticesId = this->bufferList.insert(vertexBuffer);
+    mesh.indicesId = this->bufferList.insert(indexBuffer);
+
+    this->executeTransfer([&](VkCommandBuffer commandBuffer) {
+        VkBufferCopy copy{};
+        copy.dstOffset = 0;
+
+        // Copy Vertices
+        copy.srcOffset = 0;
+        copy.size = verticesSize;
+        vkCmdCopyBuffer(commandBuffer, stagingBuffer.buffer, vertexBuffer.buffer, 1, &copy);
+
+        // Copy Indices
+        copy.srcOffset = verticesSize;
+        copy.size = indicesSize;
+        vkCmdCopyBuffer(commandBuffer, stagingBuffer.buffer, indexBuffer.buffer, 1, &copy);
+
+        return VK_SUCCESS;
+    });
+
+    vmaDestroyBuffer(this->allocator, stagingBuffer.buffer, stagingBuffer.allocation);
 }
+
 
 bool VulkanRenderer::createMaterial(Material& material) {
     VkShaderModule frag;

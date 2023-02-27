@@ -26,7 +26,12 @@
 #include "AllocationStructures.h"
 #include "VMaterial.h"
 #include "FrameData.h"
-#include "Scene/Scene.h"
+
+struct TransferContext {
+    VkFence uploadFence = VK_NULL_HANDLE;
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+};
 
 class VulkanRenderer : public Renderer {
     // Vulkan Handles
@@ -46,6 +51,8 @@ class VulkanRenderer : public Renderer {
     uint32_t graphicsQueueIndex;                // The queue index used for the graphics queue
     VkQueue graphicsQueue = VK_NULL_HANDLE;     // The queue used for graphics commands
 
+    uint32_t transferQueueIndex;                // The queue index used for the transfer queue
+    VkQueue transferQueue = VK_NULL_HANDLE;     // The queue used for transfer commands
 
     // Swapchain
     VkSwapchainKHR swapchainHandle = VK_NULL_HANDLE;    // Swap Chain handle
@@ -75,8 +82,12 @@ class VulkanRenderer : public Renderer {
 
     // GPU Memory Trackers
     IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;    // Stores Allocated Buffers against an ID
+    IDTrackedResource<uint64_t, AllocatedImage> imageList;      // Stores Allocated Images against an ID
     IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
     Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", true);
+
+    // Transfer
+    TransferContext transferContext{};    // The object containing transfer structures
 
 protected:
     /**
@@ -157,6 +168,14 @@ private:
     void initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData);
 
     /**
+     * Initialises the structures used for transfer operations between the CPU and GPU
+     * Populates transferContext
+     * @param settings the engine settings
+     * @return True if successful
+     */
+    bool initTransferContext(EngineSettings& settings);
+
+    /**
      * Sets up the swapchainHandle
      * Populates swapchainHandle, swapchainImageFormat, swapchainImages, and swapchainImageViews
      * @param settings the engine settings
@@ -191,6 +210,13 @@ private:
     bool initRenderpass(EngineSettings& settings);
 
     // Resource Handling
+
+    /**
+     * Immediately submit commands on the transfer queue
+     * @param function A function that executes commands on the commandBuffer
+     */
+    [[maybe_unused]] VkResult executeTransfer(std::function<VkResult(VkCommandBuffer commandBuffer)>&& function);
+
     /**
      * Load the shader at the given path
      * @param path The path to the shader on the disk
@@ -200,19 +226,19 @@ private:
     bool loadShader(const std::string& path, VkShaderModule* outShaderModule);
 
     /**
-     * Allocated GPU memory
+     * Allocate GPU memory
      * @param allocSize The amount of memory to allocated
      * @param usage The buffer usage flags
-     * @param memoryUsage the vma Memory usage flags
-     * @return
+     * @param flags The allocation flags
+     * @param memoryUsage The vma Memory usage flags
+     * @return The allocated buffer representing the allocated gpu memory
      */
-    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO);
 
     /**
      * Upload a mesh to the GPU
      * Sets the vertices and indices ids of the mesh
      * @param mesh The mesh to upload
-     * @return True if successful
      */
     void uploadMesh(Mesh& mesh);
 
@@ -235,6 +261,7 @@ private:
      * This is separated out so the swapchainHandle can be recreated without destroying the whole vulkan context
      */
     void cleanupSwapchain();
+
 protected:
     void setupGLFWHints() override;
 public:
