@@ -15,7 +15,7 @@
 #include "vk_mem_alloc.h"
 #include "../VkShortcuts.h"
 
-#include <Rendering/Vulkan/VTextureUtil.h>
+#include <Rendering/Vulkan/VTexture.h>
 
 /* ========================================= */
 /* Setup                                     */
@@ -309,7 +309,8 @@ bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
     std::vector<VkDescriptorPoolSize> sizes = {
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10},
-            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}
     };
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
@@ -654,7 +655,8 @@ void VulkanRenderer::cleanup() {
     bufferList.clear();
 
     for (const auto& allocatedImage: imageList.getMap()) {
-        vmaDestroyImage(this->allocator, allocatedImage.second.image, allocatedImage.second.allocation);
+        if (allocatedImage.second.imageView != VK_NULL_HANDLE) vkDestroyImageView(this->device, allocatedImage.second.imageView, nullptr);
+        vmaDestroyImage(this->allocator, allocatedImage.second.image.image, allocatedImage.second.image.allocation);
     }
 
     for (auto& vMat: materialList.getMap()) {
@@ -1091,9 +1093,34 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-    AllocatedImage image = createImage(imageCreateInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
+    VTexture vTexture;
+    vTexture.image = createImage(imageCreateInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
 
-    texture.textureId = imageList.insert(image);
+    VkImageViewCreateInfo imageViewCreateInfo {
+        VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        nullptr,
+        0,
+        vTexture.image.image,
+        VK_IMAGE_VIEW_TYPE_2D,
+        format,
+        {
+            VK_COMPONENT_SWIZZLE_R,
+            VK_COMPONENT_SWIZZLE_G,
+            VK_COMPONENT_SWIZZLE_B,
+            VK_COMPONENT_SWIZZLE_A
+        },
+        {
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0,
+            1,
+            0,
+            1
+        }
+    };
+
+    vkCreateImageView(this->device, &imageViewCreateInfo, nullptr, &vTexture.imageView);
+
+    texture.textureId = imageList.insert(vTexture);
 
     executeTransfer([&](VkCommandBuffer commandBuffer) {
         VkImageSubresourceRange range{
@@ -1114,7 +1141,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_QUEUE_FAMILY_IGNORED,
             VK_QUEUE_FAMILY_IGNORED,
-            image.image,
+            vTexture.image.image,
             range
         };
 
@@ -1135,7 +1162,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
             textureExtent
         };
 
-        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.buffer, vTexture.image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
         VkImageMemoryBarrier readableBarrier {
                 VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1147,7 +1174,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 transferQueueIndex,
                 graphicsQueueIndex,
-                image.image,
+                vTexture.image.image,
                 range
         };
 
@@ -1256,6 +1283,17 @@ bool VulkanRenderer::registerMesh(Mesh* mesh) {
 
     return true;
 }
+
+
+
+bool VulkanRenderer::registerTexture(Texture* texture) {
+    if (texture->textureId) return false;
+
+    uploadTexture(*texture);
+
+    return true;
+}
+
 
 bool VulkanRenderer::registerMaterial(Material* material) {
     if (material->materialId) return false;

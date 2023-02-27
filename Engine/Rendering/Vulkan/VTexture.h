@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 
 #include <Texture/Texture.h>
+#include "AllocationStructures.h"
 
 VkFormat textureFormatToVkFormat(TextureFormat textureFormat) {
     switch (textureFormat) {
@@ -28,3 +29,12 @@ VkFormat textureFormatToVkFormat(TextureFormat textureFormat) {
             return VK_FORMAT_R16G16B16A16_UNORM;
     }
 }
+
+struct VTexture {
+    AllocatedImage image{};
+    VkImageView imageView = VK_NULL_HANDLE;
+
+    VTexture() = default;
+
+    VTexture(const AllocatedImage& image, VkImageView imageView);
+};

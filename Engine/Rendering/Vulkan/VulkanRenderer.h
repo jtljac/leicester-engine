@@ -9,6 +9,8 @@
 
 #pragma once
 
+#define GLFW_INCLUDE_VULKAN
+
 #include <vector>
 #include <string>
 
@@ -27,6 +29,7 @@
 #include "AllocationStructures.h"
 #include "VMaterial.h"
 #include "FrameData.h"
+#include "VTexture.h"
 
 struct TransferContext {
     VkFence uploadFence = VK_NULL_HANDLE;
@@ -83,7 +86,7 @@ class VulkanRenderer : public Renderer {
 
     // GPU Memory Trackers
     IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;    // Stores Allocated Buffers against an ID
-    IDTrackedResource<uint64_t, AllocatedImage> imageList;      // Stores Allocated Images against an ID
+    IDTrackedResource<uint64_t, VTexture> imageList;      // Stores Allocated Images against an ID
     IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
     Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", true);
 
@@ -293,6 +296,7 @@ public:
     // Resource Management
     void setupScene(Scene& scene) override;
     bool registerMesh(Mesh* mesh) override;
+    bool registerTexture(Texture* texture) override;
     bool registerMaterial(Material* material) override;
 };
 
