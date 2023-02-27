@@ -15,10 +15,18 @@ Vec {
 ```
 
 ```
+Vec2 {
+    float32 x
+    float32 y
+}
+```
+
+```
 Vertex {
-    Vec position
-    Vec normal
-    Vec colour
+    Vec     position
+    Vec     normal
+    Vec     colour
+    Vec2    uv
 }
 ```
 
@@ -42,7 +50,7 @@ The header contains:
 ## The vertex array:
 The vertex array is a continuous stream of Vertices exactly the length `vertexCount` defined in the header
 
-Each vertex is comprised of 3 vecs which defined the position, normal, and colour of the vertex.
+Each vertex is comprised of 3 vecs which defined the position, normal, and colour of the vertex, and a vec2d that represents the UV coordinates.
 Vecs are defined as three 32 bit floats, each representing a dimensional coordinate.
 
 ## The index array:

@@ -20,13 +20,18 @@ protected:
 public:
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
-    BoundingBox boundingBox;
+    BoundingBox boundingBox{};
     size_t verticesId = 0;
     size_t indicesId = 0;
 
     Mesh() = default;
     Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
 
+    /**
+     * Load a mesh from a file
+     * @param filePath The path to the file
+     * @return The mesh
+     */
     bool loadMeshFromFile(const std::string& filePath);
 
     static Mesh* createNewMeshFromFile(const std::string& filePath);
