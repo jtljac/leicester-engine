@@ -157,8 +157,16 @@ bool VulkanRenderer::initVulkan(EngineSettings& settings) {
 
         this->graphicsQueueIndex = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
         this->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
-        this->transferQueueIndex = vkbDevice.get_queue_index(vkb::QueueType::transfer).value();
-        this->transferQueue = vkbDevice.get_queue(vkb::QueueType::transfer).value();
+
+        auto vkbTransferQueueIndex = vkbDevice.get_queue_index(vkb::QueueType::transfer);
+        if (vkbTransferQueueIndex.has_value()) {
+            this->transferQueueIndex = vkbTransferQueueIndex.value();
+            this->transferQueue = vkbDevice.get_queue(vkb::QueueType::transfer).value();
+        } else {
+            Logger::warn("This device does not have a separate transfer queue, defaulting to the graphics queue");
+            this->transferQueueIndex = this->graphicsQueueIndex;
+            this->transferQueue = this->graphicsQueue;
+        }
     }
 
     // VMA Allocator
@@ -464,27 +472,47 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
 bool VulkanRenderer::initTransferContext(EngineSettings& settings) {
     // Fence
     {
-        VkFenceCreateInfo fenceCreateInfo = {};
+        VkFenceCreateInfo fenceCreateInfo{};
         fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceCreateInfo.pNext = nullptr;
 
-        if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &transferContext.uploadFence) != VK_SUCCESS) {
+        if (vkCreateFence(this->device, &fenceCreateInfo, nullptr, &transferContext.transferFence) != VK_SUCCESS) {
             Logger::error("Failed to create transferContext fence");
             return false;
         }
     }
 
-    // Command Pool
+    // Semaphore
+    {
+        VkSemaphoreCreateInfo semaphoreCreateInfo{};
+        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        semaphoreCreateInfo.pNext = nullptr;
+
+        if (vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &transferContext.transferSemaphore) != VK_SUCCESS) {
+            Logger::error("Failed to create transferContext semaphore");
+            return false;
+        }
+    }
+
+    // Command Pools
     {
         VkCommandPoolCreateInfo commandPoolCreateInfo = {};
         commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         commandPoolCreateInfo.pNext = nullptr;
 
-        commandPoolCreateInfo.queueFamilyIndex = this->transferQueueIndex;
         commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
+        // Transfer Pool
+        commandPoolCreateInfo.queueFamilyIndex = this->transferQueueIndex;
         if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &transferContext.commandPool) != VK_SUCCESS) {
-            Logger::error("Failed to create command pool");
+            Logger::error("Failed to create transferContext transfer command pool");
+            return false;
+        }
+
+        // Graphics Pool
+        commandPoolCreateInfo.queueFamilyIndex = this->graphicsQueueIndex;
+        if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &transferContext.graphicsCommandPool) != VK_SUCCESS) {
+            Logger::error("Failed to create transferContext graphics command pool");
             return false;
         }
 
@@ -494,9 +522,18 @@ bool VulkanRenderer::initTransferContext(EngineSettings& settings) {
 
         commandBufferAllocateInfo.commandBufferCount = 1;
         commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+        // Transfer Buffer
         commandBufferAllocateInfo.commandPool = transferContext.commandPool;
         if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &transferContext.commandBuffer) != VK_SUCCESS) {
-            Logger::error("Failed to create transferContext command buffer");
+            Logger::error("Failed to create transferContext transfer command buffer");
+            return false;
+        }
+
+        // Graphics Buffer
+        commandBufferAllocateInfo.commandPool = transferContext.graphicsCommandPool;
+        if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &transferContext.graphicsCommandBuffer) != VK_SUCCESS) {
+            Logger::error("Failed to create transferContext graphics command buffer");
             return false;
         }
     }
@@ -937,12 +974,55 @@ VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer)
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &transferContext.commandBuffer;
 
-    vkQueueSubmit(transferQueue, 1, &submitInfo, transferContext.uploadFence);
+    vkQueueSubmit(transferQueue, 1, &submitInfo, transferContext.transferFence);
 
-    vkWaitForFences(this->device, 1, &transferContext.uploadFence, true, UINT64_MAX);
-    vkResetFences(this->device, 1, &transferContext.uploadFence);
+    vkWaitForFences(this->device, 1, &transferContext.transferFence, true, UINT64_MAX);
+    vkResetFences(this->device, 1, &transferContext.transferFence);
 
     vkResetCommandPool(this->device, transferContext.commandPool, 0);
+
+    return result;
+}
+
+VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer, VkCommandBuffer)>&& function) {
+        // Command Buffer
+    VkResult result;
+    {
+        result = function(transferContext.commandBuffer, transferContext.graphicsCommandBuffer);
+    }
+    VkSubmitInfo transferSubmitInfo {
+        VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        nullptr,
+
+        0,
+        nullptr,
+        nullptr,
+        1,
+        &transferContext.commandBuffer,
+        1,
+        &transferContext.transferSemaphore
+    };
+    vkQueueSubmit(transferQueue, 1, &transferSubmitInfo, VK_NULL_HANDLE);
+
+    VkSubmitInfo graphicsSubmitInfo {
+        VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        nullptr,
+
+        1,
+        &transferContext.transferSemaphore,
+        nullptr,
+        1,
+        &transferContext.graphicsCommandBuffer,
+        0,
+        nullptr
+    };
+    vkQueueSubmit(graphicsQueue, 1, &graphicsSubmitInfo, transferContext.transferFence);
+
+    vkWaitForFences(this->device, 1, &transferContext.transferFence, true, UINT64_MAX);
+    vkResetFences(this->device, 1, &transferContext.transferFence);
+
+    vkResetCommandPool(this->device, transferContext.commandPool, 0);
+    vkResetCommandPool(this->device, transferContext.graphicsCommandPool, 0);
 
     return result;
 }
@@ -1097,12 +1177,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    imageCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
-    imageCreateInfo.queueFamilyIndexCount = 2;
-
-    uint32_t queues[]{graphicsQueueIndex, transferQueueIndex};
-
-    imageCreateInfo.pQueueFamilyIndices = queues;
+    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 
     VTexture vTexture;
@@ -1111,6 +1186,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
     VkImageViewCreateInfo imageViewCreateInfo {
         VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         nullptr,
+
         0,
         vTexture.image.image,
         VK_IMAGE_VIEW_TYPE_2D,
@@ -1147,7 +1223,12 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
     texture.textureId = imageList.insert(vTexture);
 
     // Transfer data to real buffer
-    executeTransfer([&](VkCommandBuffer commandBuffer) {
+    executeTransfer([&](VkCommandBuffer transferCommandBuffer, VkCommandBuffer graphicsCommandBuffer) {
+        VkCommandBufferBeginInfo commandBufferBeginInfo{};
+        commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        commandBufferBeginInfo.pNext = nullptr;
+        commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(transferCommandBuffer, &commandBufferBeginInfo);
         VkImageSubresourceRange range{
             VK_IMAGE_ASPECT_COLOR_BIT,
             0,
@@ -1170,7 +1251,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
             range
         };
 
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+        vkCmdPipelineBarrier(transferCommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                              nullptr, 0, nullptr, 1, &transferBarrier);
 
         VkBufferImageCopy copy{
@@ -1187,7 +1268,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
             textureExtent
         };
 
-        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.buffer, vTexture.image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        vkCmdCopyBufferToImage(transferCommandBuffer, stagingBuffer.buffer, vTexture.image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
         VkImageMemoryBarrier readableBarrier {
                 VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1197,14 +1278,20 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
 
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_QUEUE_FAMILY_IGNORED,
-                VK_QUEUE_FAMILY_IGNORED,
+                transferQueueIndex,
+                graphicsQueueIndex,
                 vTexture.image.image,
                 range
         };
 
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+        vkCmdPipelineBarrier(transferCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
                              nullptr, 0, nullptr, 1, &readableBarrier);
+        vkEndCommandBuffer(transferCommandBuffer);
+
+        vkBeginCommandBuffer(graphicsCommandBuffer, &commandBufferBeginInfo);
+        vkCmdPipelineBarrier(graphicsCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+                             nullptr, 0, nullptr, 1, &readableBarrier);
+        vkEndCommandBuffer(graphicsCommandBuffer);
         return VK_SUCCESS;
     });
 

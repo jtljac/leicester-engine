@@ -32,9 +32,12 @@
 #include "VTexture.h"
 
 struct TransferContext {
-    VkFence uploadFence = VK_NULL_HANDLE;
+    VkFence transferFence = VK_NULL_HANDLE;
+    VkSemaphore transferSemaphore = VK_NULL_HANDLE;
     VkCommandPool commandPool = VK_NULL_HANDLE;
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VkCommandPool graphicsCommandPool = VK_NULL_HANDLE;
+    VkCommandBuffer graphicsCommandBuffer = VK_NULL_HANDLE;
 };
 
 class VulkanRenderer : public Renderer {
@@ -222,6 +225,16 @@ private:
     [[maybe_unused]] VkResult executeTransfer(std::function<VkResult(VkCommandBuffer commandBuffer)>&& function);
 
     /**
+     * Immediately submit commands on the transfer and graphics queue, syncronised to ensure the transfer queue executes
+     * first
+     * <br>
+     * Note this does not begin or end either buffer
+     * @param function A function that executes commands on the command buffers
+     * @return
+     */
+    [[maybe_unused]] VkResult executeTransfer(std::function<VkResult(VkCommandBuffer transferBuffer, VkCommandBuffer graphicsBuffer)>&& function);
+
+    /**
      * Load the shader at the given path
      * @param path The path to the shader on the disk
      * @param outShaderModule A pointer to store the created shader module in
@@ -256,11 +269,11 @@ private:
     void uploadMesh(Mesh& mesh);
 
     /**
-     * Upload a texture to the GPU
-     * Sets the textureId of the texture
-     * @param texture The texture to upload
+     * Upload a transferCommandBuffer to the GPU
+     * Sets the textureId of the transferCommandBuffer
+     * @param transferCommandBuffer The transferCommandBuffer to upload
      */
-    void uploadTexture(Texture& texture);
+    void uploadTexture(Texture& transferCommandBuffer);
 
     /**
      * Uploads a material to the GPU
