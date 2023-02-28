@@ -133,6 +133,8 @@ CollisionResult GJKCollisionEngine::testCollision(Actor* actor1, Actor* actor2) 
         else if (state == GJKState::MISS) return CollisionResult{false};
         --i;
     }
+
+    return CollisionResult{false};
 }
 
 size_t GJKCollisionEngine::getFaceNormals(std::vector<glm::vec3>& polytope, std::vector<size_t> indices,
