@@ -32,3 +32,19 @@ VkWriteDescriptorSet VKShortcuts::createWriteDescriptorSet(uint32_t binding, VkD
 
     return writeDescriptorSet;
 }
+
+VkWriteDescriptorSet
+VKShortcuts::createWriteDescriptorSetImage(uint32_t binding, VkDescriptorSet set, VkDescriptorType type, VkDescriptorImageInfo* imageInfo) {
+    VkWriteDescriptorSet writeDescriptorSet{};
+
+    writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet.pNext = nullptr;
+
+    writeDescriptorSet.dstBinding = binding;
+    writeDescriptorSet.dstSet = set;
+    writeDescriptorSet.descriptorCount = 1;
+    writeDescriptorSet.descriptorType = type;
+    writeDescriptorSet.pImageInfo = imageInfo;
+
+    return writeDescriptorSet;
+}

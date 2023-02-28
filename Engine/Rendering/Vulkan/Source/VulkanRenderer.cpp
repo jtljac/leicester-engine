@@ -654,15 +654,16 @@ void VulkanRenderer::cleanup() {
     }
     bufferList.clear();
 
-    for (const auto& allocatedImage: imageList.getMap()) {
-        if (allocatedImage.second.imageView != VK_NULL_HANDLE) vkDestroyImageView(this->device, allocatedImage.second.imageView, nullptr);
-        vmaDestroyImage(this->allocator, allocatedImage.second.image.image, allocatedImage.second.image.allocation);
-    }
-
     for (auto& vMat: materialList.getMap()) {
         vMat.second.deleteMaterial(device);
     }
     materialList.clear();
+
+    for (const auto& image: imageList.getMap()) {
+        if (image.second.sampler != VK_NULL_HANDLE) vkDestroySampler(this->device, image.second.sampler, nullptr);
+        if (image.second.imageView != VK_NULL_HANDLE) vkDestroyImageView(this->device, image.second.imageView, nullptr);
+        vmaDestroyImage(this->allocator, image.second.image.image, image.second.image.allocation);
+    }
 
     deletionQueue.flush(this->device);
 
@@ -821,6 +822,8 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
                                         0, 1, &frame.globalDescriptor, 1, &uniformOffset);
                 vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
                                         1, 1, &frame.passDescriptor, 0, nullptr);
+                vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                        2, 1, &vMat.materialDescriptor, 0, nullptr);
             }
 
             AllocatedBuffer vertBuffer = this->bufferList.get(mesh.mesh->verticesId);
@@ -1007,6 +1010,8 @@ AllocatedImage VulkanRenderer::createImage(VkImageCreateInfo& imageCreateInfo, V
 
     AllocatedImage allocatedImage;
     vmaCreateImage(this->allocator, &imageCreateInfo, &allocationCreateInfo, &allocatedImage.image, &allocatedImage.allocation, nullptr);
+
+    return allocatedImage;
 }
 
 void VulkanRenderer::uploadMesh(Mesh& mesh) {
@@ -1092,6 +1097,13 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    imageCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+    imageCreateInfo.queueFamilyIndexCount = 2;
+
+    uint32_t queues[]{graphicsQueueIndex, transferQueueIndex};
+
+    imageCreateInfo.pQueueFamilyIndices = queues;
+
 
     VTexture vTexture;
     vTexture.image = createImage(imageCreateInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
@@ -1120,8 +1132,21 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
 
     vkCreateImageView(this->device, &imageViewCreateInfo, nullptr, &vTexture.imageView);
 
+    {
+        VkSamplerCreateInfo samplerCreateInfo{};
+        samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerCreateInfo.pNext = nullptr;
+        samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
+        samplerCreateInfo.minFilter = VK_FILTER_NEAREST;
+        samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+        vkCreateSampler(device, &samplerCreateInfo, nullptr, &vTexture.sampler);
+    }
     texture.textureId = imageList.insert(vTexture);
 
+    // Transfer data to real buffer
     executeTransfer([&](VkCommandBuffer commandBuffer) {
         VkImageSubresourceRange range{
             VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1172,15 +1197,14 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
 
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                transferQueueIndex,
-                graphicsQueueIndex,
+                VK_QUEUE_FAMILY_IGNORED,
+                VK_QUEUE_FAMILY_IGNORED,
                 vTexture.image.image,
                 range
         };
 
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
                              nullptr, 0, nullptr, 1, &readableBarrier);
-
         return VK_SUCCESS;
     });
 
@@ -1189,16 +1213,25 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
 
 
 bool VulkanRenderer::createMaterial(Material& material) {
-    VkShaderModule frag;
-    if (!this->loadShader(FileUtils::getAssetsPath() + material.spirvFrag, &frag)) {
-        Logger::error("Failed to open frag shader: " + material.spirvFrag);
-        return false;
-    }
+    VkDescriptorSetLayout materialLayout;
+    {
+        std::vector<VkDescriptorSetLayoutBinding> bindings;
+        for (int i = 0; i < material.textures.size(); ++i) {
+            Texture* texture = material.textures[i];
 
-    VkShaderModule vert;
-    if (!this->loadShader(FileUtils::getAssetsPath() + material.spirvVert, &vert)) {
-        Logger::error("Failed to open vert shader: " + material.spirvVert);
-        return false;
+            registerTexture(texture);
+
+            bindings.push_back(VKShortcuts::createDescriptorSetLayoutBinding(i, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
+        }
+        VkDescriptorSetLayoutCreateInfo materialLayoutCreateInfo{
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            nullptr,
+            0,
+            static_cast<uint32_t>(bindings.size()),
+            bindings.data()
+        };
+
+        vkCreateDescriptorSetLayout(this->device, &materialLayoutCreateInfo, nullptr, &materialLayout);
     }
 
     VkPipelineLayout pipelineLayout;
@@ -1209,9 +1242,9 @@ bool VulkanRenderer::createMaterial(Material& material) {
 
         pipelineLayoutCreateInfo.flags = 0;
 
-        VkDescriptorSetLayout setLayouts[] = {this->globalDescriptorSetLayout, this->passDescriptorSetLayout};
+        VkDescriptorSetLayout setLayouts[] = {this->globalDescriptorSetLayout, this->passDescriptorSetLayout, materialLayout};
 
-        pipelineLayoutCreateInfo.setLayoutCount = 2;
+        pipelineLayoutCreateInfo.setLayoutCount = 3;
         pipelineLayoutCreateInfo.pSetLayouts = setLayouts;
 
         VkPushConstantRange pushConstantRange;
@@ -1229,28 +1262,69 @@ bool VulkanRenderer::createMaterial(Material& material) {
         }
     }
 
-    std::optional<VkPipeline> pipeline = PipelineBuilder(this->device, this->renderPass, pipelineLayout)
-            .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, vert)
-            .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, frag)
-            .setVertexInputInfo(VertexDescription::getVertexDescription())
+    VertexDescription vertexDescription = VertexDescription::getVertexDescription();
+    PipelineBuilder builder = PipelineBuilder(this->device, this->renderPass, pipelineLayout)
+            .setVertexInputInfo(vertexDescription)
             .setInputAssemblyInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
             .setViewport(0.f, 0.f, (float) this->settings->windowWidth, (float) this->settings->windowHeight)
             .setScissor(0, 0, this->settings->windowWidth, this->settings->windowHeight)
-            .setRasterisationState(material.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL)
+            .setRasterisationState(material.shaderType == ShaderType::WIREFRAME ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL)
             .setMultisampleStateDefault()
             .setColourBlendAttachmentDefault()
-            .setDepthStencilState(true, true, VK_COMPARE_OP_LESS, false)
-            .buildPipeline();
+            .setDepthStencilState(true, true, VK_COMPARE_OP_LESS, false);
+
+    std::vector<VkShaderModule> shaderModules;
+    shaderModules.reserve(material.materialStages.size());
+    for (const auto& stage: material.materialStages) {
+        VkShaderModule shaderModule;
+        if (!this->loadShader(FileUtils::getAssetsPath() + stage.shaderPathSpirv, &shaderModule)) {
+            Logger::error("Failed to open shader: " + stage.shaderPathSpirv);
+            return false;
+        }
+
+        builder.addShaderStage(MaterialUtil::stageFlagFromShaderStage(stage.shaderStage), shaderModule);
+        shaderModules.push_back(shaderModule);
+    }
+
+    std::optional<VkPipeline> pipeline = builder.buildPipeline();
 
     if (!pipeline.has_value()) {
         Logger::error("Failed to create pipeline");
         return false;
     }
 
-    material.materialId = this->materialList.insert(VMaterial(pipeline.value(), pipelineLayout));
+    VkDescriptorSet materialSet;
+    {
+        VkDescriptorSetAllocateInfo materialDescriptorSetAllocInfo{
+                VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                nullptr,
+                this->descriptorPool,
+                1,
+                &materialLayout
+        };
+        vkAllocateDescriptorSets(this->device, &materialDescriptorSetAllocInfo, &materialSet);
 
-    vkDestroyShaderModule(this->device, frag, nullptr);
-    vkDestroyShaderModule(this->device, vert, nullptr);
+        std::vector<VkWriteDescriptorSet> writeDescriptorSets(material.textures.size());
+        for (int i = 0; i < material.textures.size(); ++i) {
+            Texture* texture = material.textures[i];
+            VTexture vTexture = imageList.get(texture->textureId);
+            VkDescriptorImageInfo imageInfo {
+                vTexture.sampler,
+                vTexture.imageView,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            };
+
+            writeDescriptorSets[i] = VKShortcuts::createWriteDescriptorSetImage(i, materialSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imageInfo);
+        }
+
+        vkUpdateDescriptorSets(this->device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+
+    }
+    material.materialId = this->materialList.insert(VMaterial(pipeline.value(), pipelineLayout, materialLayout, materialSet));
+
+    for (const auto& shaderModule: shaderModules) {
+        vkDestroyShaderModule(this->device, shaderModule, nullptr);
+    }
 
     return true;
 }

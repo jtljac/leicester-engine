@@ -50,7 +50,7 @@ VertexDescription VertexDescription::getVertexDescription() {
         description.attributes.push_back(colAttributeDescription);
     }
 
-    // UV
+    // UV (Location 3)
     {
         VkVertexInputAttributeDescription uvAttributeDescription = {};
         uvAttributeDescription.binding = 0;

@@ -88,7 +88,7 @@ class VulkanRenderer : public Renderer {
     IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;    // Stores Allocated Buffers against an ID
     IDTrackedResource<uint64_t, VTexture> imageList;      // Stores Allocated Images against an ID
     IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
-    Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", true);
+    Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", ShaderType::WIREFRAME);
 
     // Transfer
     TransferContext transferContext{};    // The object containing transfer structures

@@ -7,7 +7,7 @@
 #define TEXTUREVERSION 1
 
 int FormatUtils::calculatePixelSize(TextureFormat format) {
-    int formatValue = (int) format;
+    int formatValue = static_cast<uint32_t>(format);
     if (formatValue < 4) {
         return formatValue + 1;
     }
@@ -42,7 +42,7 @@ bool Texture::loadTextureFromFile(const std::string& filePath) {
     size_t textureSize = size();
     pixels.resize(textureSize);
 
-    file.read(reinterpret_cast<char*>(&this->pixels), textureSize);
+    file.read(this->pixels.data(), textureSize);
 
     file.close();
 
@@ -50,7 +50,7 @@ bool Texture::loadTextureFromFile(const std::string& filePath) {
 }
 
 Texture* Texture::createNewTextureFromFile(const std::string& filePath) {
-    Texture* texture = new Texture;
+    Texture* texture = new Texture();
     if (!texture->loadTextureFromFile(filePath)) {
         delete texture;
         return nullptr;

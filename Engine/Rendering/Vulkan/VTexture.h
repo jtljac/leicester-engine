@@ -9,32 +9,14 @@
 #include <Texture/Texture.h>
 #include "AllocationStructures.h"
 
-VkFormat textureFormatToVkFormat(TextureFormat textureFormat) {
-    switch (textureFormat) {
-        case TextureFormat::R8:
-            return VK_FORMAT_R8_SRGB;
-        case TextureFormat::R8G8:
-            return VK_FORMAT_R8G8_SRGB;
-        case TextureFormat::R8G8B8:
-            return VK_FORMAT_R8G8B8_SRGB;
-        case TextureFormat::R8G8B8A8:
-            return VK_FORMAT_R8G8B8A8_SRGB;
-        case TextureFormat::R16:
-            return VK_FORMAT_R16_UNORM;
-        case TextureFormat::R16G16:
-            return VK_FORMAT_R16G16_UNORM;
-        case TextureFormat::R16G16B16:
-            return VK_FORMAT_R16G16B16_UNORM;
-        case TextureFormat::R16G16B16A16:
-            return VK_FORMAT_R16G16B16A16_UNORM;
-    }
-}
+VkFormat textureFormatToVkFormat(TextureFormat textureFormat);
 
 struct VTexture {
     AllocatedImage image{};
     VkImageView imageView = VK_NULL_HANDLE;
+    VkSampler sampler = VK_NULL_HANDLE;
 
     VTexture() = default;
 
-    VTexture(const AllocatedImage& image, VkImageView imageView);
+    VTexture(const AllocatedImage& image, VkImageView imageView, VkSampler sampler);
 };
