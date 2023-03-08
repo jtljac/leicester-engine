@@ -6,12 +6,9 @@
 
 #include "Material/Material.h"
 
-Material::Material(std::string  vertPath, std::string  fragPath) :
-        spirvVert(std::move(vertPath)),
-        spirvFrag(std::move(fragPath)),
-        wireframe(false) {}
-
-Material::Material(std::string vertPath, std::string fragPath, bool wireframe):
-        spirvVert(std::move(vertPath)),
-        spirvFrag(std::move(fragPath)),
-        wireframe(wireframe) {}
+Material::Material(std::string vertPath, std::string fragPath, ShaderType shaderType,
+                   const std::vector<Texture*>& textures) :
+                   materialStages({{vertPath, ShaderStage::VERT}, {fragPath, ShaderStage::FRAG}}),
+                   shaderType(shaderType),
+                   textures(textures)
+                   {}

@@ -8,14 +8,31 @@
 #include <cstdint>
 #include <string>
 
+#include <Texture/Texture.h>
+
+enum class ShaderStage : uint8_t {
+    FRAG,
+    VERT
+};
+
+enum class ShaderType : uint8_t {
+    OPAQUE,
+    WIREFRAME,
+    TRANSPARENT
+};
+
+struct MaterialStage {
+    std::string shaderPathSpirv;
+    ShaderStage shaderStage;
+};
+
 struct Material {
     uint64_t materialId = 0;
 
-    std::string spirvVert;
-    std::string spirvFrag;
+    std::vector<MaterialStage> materialStages;
+    ShaderType shaderType = ShaderType::OPAQUE;
 
-    bool wireframe;
+    std::vector<Texture*> textures;
 
-    Material(std::string vertPath, std::string fragPath);
-    Material(std::string vertPath, std::string fragPath, bool wireframe);
+    Material(std::string vertPath, std::string fragPath, ShaderType shaderType, const std::vector<Texture*>& textures = {});
 };

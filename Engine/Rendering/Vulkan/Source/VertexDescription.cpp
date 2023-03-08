@@ -2,7 +2,7 @@
 // Created by jacob on 30/10/22.
 //
 
-#include "Rendering/Vulkan/VertexDescription.h"
+#include <Rendering/Vulkan/VertexDescription.h>
 
 VertexDescription VertexDescription::getVertexDescription() {
     VertexDescription description;
@@ -48,6 +48,17 @@ VertexDescription VertexDescription::getVertexDescription() {
         colAttributeDescription.offset = offsetof(Vertex, colour);
 
         description.attributes.push_back(colAttributeDescription);
+    }
+
+    // UV (Location 3)
+    {
+        VkVertexInputAttributeDescription uvAttributeDescription = {};
+        uvAttributeDescription.binding = 0;
+        uvAttributeDescription.location = 3;
+        uvAttributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
+        uvAttributeDescription.offset = offsetof(Vertex, uv);
+
+        description.attributes.push_back(uvAttributeDescription);
     }
 
     return description;

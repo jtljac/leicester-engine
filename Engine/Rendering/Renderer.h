@@ -5,7 +5,6 @@
 #pragma once
 
 // Setup Environment
-#define GLFW_INCLUDE_VULKAN
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
@@ -14,7 +13,8 @@
 #include <Utils/EngineSettings.h>
 
 #include <vector>
-#include "Scene/Scene.h"
+#include <Scene/Scene.h>
+#include <Texture/Texture.h>
 
 class Renderer {
 protected:
@@ -56,6 +56,14 @@ public:
      * @return true if successful, false if the mesh has already been registered
      */
     virtual bool registerMesh(Mesh* mesh) = 0;
+
+    /**
+     * Register a texture in the renderer
+     * Sets the textureId
+     * @param texture The mesh to register
+     * @return true if successful, false if the mesh has already been registered
+     */
+    virtual bool registerTexture(Texture* texture) = 0;
 
     /**
      * Register a material in the renderer

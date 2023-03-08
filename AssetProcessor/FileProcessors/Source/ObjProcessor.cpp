@@ -56,6 +56,11 @@ void ObjProcessor::processFile(const std::string& src, const std::string& dest) 
                                                    attrib.colors[3*index.vertex_index + 0],
                                                    attrib.colors[3*index.vertex_index + 1],
                                                    attrib.colors[3*index.vertex_index + 2]
+                                           },
+                                           {
+                                                   attrib.texcoords[2 * index.texcoord_index + 0],
+                                                   -attrib.texcoords[2 * index.texcoord_index + 1],
+
                                            }
                                    });
             }
@@ -73,7 +78,7 @@ void ObjProcessor::writeMesh(const std::string& dest, std::vector<Vertex>& verti
 
     // Write Header
     {
-        uint8_t version = 1;
+        uint8_t version = 2;
         // Version
         destFile.write(reinterpret_cast<char*>(&version), 1);
         // Vertex Count
@@ -91,5 +96,5 @@ void ObjProcessor::writeMesh(const std::string& dest, std::vector<Vertex>& verti
 }
 
 std::string ObjProcessor::getConversionMessage(const std::string& src, const std::string& dest) {
-    return "Converting " + src + " to lmesh " + replaceExtension(dest, "lmesh");
+    return "Converting Obj " + src + " to lmesh " + replaceExtension(dest, "lmesh");
 }

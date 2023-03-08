@@ -1,5 +1,6 @@
 /**
  * This code (and it's source) was created by following these guides:
+ * <br>
  * https://vkguide.dev/             MIT Licence: https://github.com/vblanco20-1/vulkan-guide/blob/master/LICENSE.txt
  * https://vulkan-tutorial.com/     CCO 1.0 Universal Licence: https://github.com/Overv/VulkanTutorial/blob/master/README.md#license
  *
@@ -8,49 +9,76 @@
 
 #pragma once
 
+#define GLFW_INCLUDE_VULKAN
+
 #include <vector>
 #include <string>
 
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 
-#include "../Renderer.h"
+#include <Utils/IdTrackedResource.h>
+#include <Rendering/GPUStructures/GpuStructs.h>
+#include <Scene/Scene.h>
 #include <Mesh/Mesh.h>
+#include <Mesh/StaticMesh.h>
+#include <Texture/Texture.h>
+
+#include "../Renderer.h"
 #include "DeletionQueue.h"
 #include "AllocationStructures.h"
-#include "Utils/IdTrackedResource.h"
 #include "VMaterial.h"
-#include "Mesh/StaticMesh.h"
 #include "FrameData.h"
-#include "Scene/Scene.h"
+#include "VTexture.h"
+
+struct TransferContext {
+    VkFence transferFence = VK_NULL_HANDLE;
+    VkSemaphore transferSemaphore = VK_NULL_HANDLE;
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VkCommandPool graphicsCommandPool = VK_NULL_HANDLE;
+    VkCommandBuffer graphicsCommandBuffer = VK_NULL_HANDLE;
+};
 
 class VulkanRenderer : public Renderer {
     // Vulkan Handles
-    VkInstance vInstance;                       // Vulkan instance handle
-    VkDebugUtilsMessengerEXT debugMessenger;    // Debug output handle
-    VkPhysicalDevice gpu;                       // Physical GPU Device Handle
-    VkDevice device;                            // Device Handle for commands
-    VkSurfaceKHR surface;                       // Window surface handle
+    VkInstance vInstance = VK_NULL_HANDLE;                       // Vulkan instance handle
+    VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;    // Debug output handle
+    VkPhysicalDevice gpu = VK_NULL_HANDLE;                       // Physical GPU Device Handle
+    VkDevice device = VK_NULL_HANDLE;                            // Device Handle for commands
+    VkSurfaceKHR surface = VK_NULL_HANDLE;                       // Window surface handle
+
+    // GPU info
+    VkPhysicalDeviceProperties gpuProperties;   // Info about the current GPU Device
 
     // Memory Management
-    VmaAllocator allocator;         // The GPU memory allocator
+    VmaAllocator allocator = VK_NULL_HANDLE;    // The GPU memory allocator
 
     // Queues
-    VkQueue graphicsQueue;          // The queue used for graphics commands
+    uint32_t graphicsQueueIndex;                // The queue index used for the graphics queue
+    VkQueue graphicsQueue = VK_NULL_HANDLE;     // The queue used for graphics commands
+
+    uint32_t transferQueueIndex;                // The queue index used for the transfer queue
+    VkQueue transferQueue = VK_NULL_HANDLE;     // The queue used for transfer commands
 
     // Swapchain
-    VkSwapchainKHR swapchainHandle;     // Swap Chain handle
-    VkFormat swapchainImageFormat;      // The format of the swapchainHandle
+    VkSwapchainKHR swapchainHandle = VK_NULL_HANDLE;    // Swap Chain handle
+    VkFormat swapchainImageFormat;                      // The format of the swapchainHandle
 
     // Depth Buffer
-    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;    // The format of the depth buffer
+    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;        // The format of the depth buffer
 
     // Renderpass
-    VkRenderPass renderPass;        // The renderpass handle
+    VkRenderPass renderPass = VK_NULL_HANDLE;           // The renderpass handle
 
     // Descriptor Set
-    VkDescriptorSetLayout globalDescriptorSetLayout;
-    VkDescriptorPool descriptorPool;
+    VkDescriptorSetLayout globalDescriptorSetLayout = VK_NULL_HANDLE;   // Descriptor set layout for global data
+    VkDescriptorSetLayout passDescriptorSetLayout = VK_NULL_HANDLE;     // Descriptor set layout for pass data
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;                   // Pool of which descriptor sets are allocated to
+
+    // Scene data
+    GPUSceneData sceneParams{};
+    AllocatedBuffer sceneParamsBuffer{};
 
     // Frame Data
     unsigned int currentFrame = 0;              // The current frame being rendered
@@ -61,8 +89,12 @@ class VulkanRenderer : public Renderer {
 
     // GPU Memory Trackers
     IDTrackedResource<uint64_t, AllocatedBuffer> bufferList;    // Stores Allocated Buffers against an ID
+    IDTrackedResource<uint64_t, VTexture> imageList;      // Stores Allocated Images against an ID
     IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
-    Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", true);
+    Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", ShaderType::WIREFRAME);
+
+    // Transfer
+    TransferContext transferContext{};    // The object containing transfer structures
 
 protected:
     /**
@@ -80,6 +112,15 @@ protected:
             VK_KHR_SWAPCHAIN_EXTENSION_NAME // The extension that enables the use of a swap chain for presenting
     };
 
+    /**
+     * Pad the given size so it's aligned to the GPU's alignment boundaries
+     * <br>
+     * Taken from https://github.com/SaschaWillems/Vulkan/tree/master/examples/dynamicuniformbuffer    MIT License: https://github.com/SaschaWillems/Vulkan/blob/master/LICENSE.md
+     * @param originalSize The original size of the data being padded
+     * @return a new size, aligned to the GPU's alignment boundaries
+     */
+    size_t padUniformBufferSize(size_t originalSize);
+
 private:
     /**
      * Sets up the Vulkan instance, the device, and the queues
@@ -95,7 +136,7 @@ private:
      * Setup the descriptors used by the pipelines
      * @param settings the engine settings
      */
-    void initDescriptors(EngineSettings& settings);
+    bool initDescriptors(EngineSettings& settings);
 
     /**
      * Initialises the frameData objects
@@ -103,7 +144,7 @@ private:
      * @param graphicsQueueIndex the index of the graphics queue used for the command pools
      * @return True if successful
      */
-    bool initFrameData(EngineSettings& settings, unsigned int graphicsQueueIndex);
+    bool initFrameData(EngineSettings& settings);
 
     /**
      * Initialises the graphics pools in the provided FrameData
@@ -113,7 +154,7 @@ private:
      * @param graphicsQueueIndex the index of the graphics queue used for the command pools
      * @return True if successful
      */
-    bool initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData, unsigned int graphicsQueueIndex);
+    bool initFrameDataGraphicsPools(EngineSettings& settings, FrameData& frameData);
 
     /**
      * Initialise the semaphores and fences of the given FrameData
@@ -132,6 +173,14 @@ private:
      * @return True if successful
      */
     void initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData);
+
+    /**
+     * Initialises the structures used for transfer operations between the CPU and GPU
+     * Populates transferContext
+     * @param settings the engine settings
+     * @return True if successful
+     */
+    bool initTransferContext(EngineSettings& settings);
 
     /**
      * Sets up the swapchainHandle
@@ -168,6 +217,23 @@ private:
     bool initRenderpass(EngineSettings& settings);
 
     // Resource Handling
+
+    /**
+     * Immediately submit commands on the transfer queue
+     * @param function A function that executes commands on the commandBuffer
+     */
+    [[maybe_unused]] VkResult executeTransfer(std::function<VkResult(VkCommandBuffer commandBuffer)>&& function);
+
+    /**
+     * Immediately submit commands on the transfer and graphics queue, syncronised to ensure the transfer queue executes
+     * first
+     * <br>
+     * Note this does not begin or end either buffer
+     * @param function A function that executes commands on the command buffers
+     * @return
+     */
+    [[maybe_unused]] VkResult executeTransfer(std::function<VkResult(VkCommandBuffer transferBuffer, VkCommandBuffer graphicsBuffer)>&& function);
+
     /**
      * Load the shader at the given path
      * @param path The path to the shader on the disk
@@ -177,21 +243,37 @@ private:
     bool loadShader(const std::string& path, VkShaderModule* outShaderModule);
 
     /**
-     * Allocated GPU memory
+     * Allocate GPU memory
      * @param allocSize The amount of memory to allocated
      * @param usage The buffer usage flags
-     * @param memoryUsage the vma Memory usage flags
-     * @return
+     * @param flags The allocation flags
+     * @param memoryUsage The vma Memory usage flags
+     * @return The allocated buffer representing the allocated gpu memory
      */
-    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO);
+
+    /**
+     * Allocate an image on the GPU
+     * @param imageCreateInfo The image info
+     * @param flags The allocation flags
+     * @param memoryUsage The VMA Memory usage flags
+     * @return The allocated image representing the allocated gpu image
+     */
+    AllocatedImage createImage(VkImageCreateInfo& imageCreateInfo, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO);
 
     /**
      * Upload a mesh to the GPU
      * Sets the vertices and indices ids of the mesh
      * @param mesh The mesh to upload
-     * @return True if successful
      */
     void uploadMesh(Mesh& mesh);
+
+    /**
+     * Upload a transferCommandBuffer to the GPU
+     * Sets the textureId of the transferCommandBuffer
+     * @param transferCommandBuffer The transferCommandBuffer to upload
+     */
+    void uploadTexture(Texture& transferCommandBuffer);
 
     /**
      * Uploads a material to the GPU
@@ -212,20 +294,22 @@ private:
      * This is separated out so the swapchainHandle can be recreated without destroying the whole vulkan context
      */
     void cleanupSwapchain();
+
 protected:
     void setupGLFWHints() override;
 public:
     VulkanRenderer() = default;
-    ~VulkanRenderer() override;
+    ~VulkanRenderer() override = default;
 
     // Overrides
     bool initialise(EngineSettings& settings) override;
-    void setupScene(Scene& scene) override;
     void drawFrame(double deltaTime, double gameTime, const Scene& scene) override;
     void cleanup() override;
 
+    // Resource Management
+    void setupScene(Scene& scene) override;
     bool registerMesh(Mesh* mesh) override;
-
+    bool registerTexture(Texture* texture) override;
     bool registerMaterial(Material* material) override;
 };
 

@@ -6,7 +6,7 @@
  */
 #pragma once
 #include <vulkan/vulkan.h>
-
+#include <glm/glm.hpp>
 #include "AllocationStructures.h"
 
 struct FrameData {
@@ -20,10 +20,11 @@ struct FrameData {
 
     // Descriptor Sets
     VkDescriptorSet globalDescriptor;
+    VkDescriptorSet passDescriptor;
 
     // Buffers
     AllocatedBuffer cameraBuffer;
-
+    AllocatedBuffer objectBuffer;
 };
 
 struct SwapchainData {

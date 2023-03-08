@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.22)
 # tinyobjloader for reading .obj files
 target_include_directories(asset-processor PUBLIC tinyobjloader)
 
+# stb_image for reading image files
+target_include_directories(asset-processor PUBLIC stb)
+
 # GLM for Maths
 find_package(glm REQUIRED)
 target_link_libraries(asset-processor glm)

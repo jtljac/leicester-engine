@@ -9,7 +9,7 @@
 #include <fstream>
 #include <filesystem>
 #include <utility>
-#define MESHVERSION 1
+#define MESHVERSION 2
 
 Mesh::Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices) : vertices(std::move(vertices)),
                                                                           indices(std::move(indices)),

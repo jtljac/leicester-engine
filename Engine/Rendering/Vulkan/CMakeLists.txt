@@ -7,4 +7,6 @@ target_sources(leicester-engine PRIVATE
         Source/VertexDescription.cpp
         Source/VMaterial.cpp
         Source/FrameData.cpp
+        Source/VkShortcuts.cpp
+        Source/VTexture.cpp
 )

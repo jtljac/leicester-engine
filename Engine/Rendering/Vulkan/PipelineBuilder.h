@@ -68,7 +68,7 @@ public:
      * @param vertexDescription the vertexDescription to pull the vertex input info from
      * @return the PipelineBuilder
      */
-    PipelineBuilder& setVertexInputInfo(VertexDescription vertexDescription);
+    PipelineBuilder& setVertexInputInfo(VertexDescription& vertexDescription);
 
     /**
      * Sets vertexInputInfo

@@ -46,7 +46,7 @@ PipelineBuilder& PipelineBuilder::setVertexInputInfoDefault() {
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::setVertexInputInfo(VertexDescription vertexDescription) {
+PipelineBuilder& PipelineBuilder::setVertexInputInfo(VertexDescription& vertexDescription) {
     VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
     vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputStateCreateInfo.pNext = nullptr;

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <cstring>
 #include "FileProcessors/ObjProcessor.h"
+#include "FileProcessors/ImgProcessor.h"
 #include "FileProcessors/ShaderProcessor.h"
 #include "FileProcessors/CopyProcessor.h"
 
@@ -69,6 +70,13 @@ int main(int argc, char** argv) {
         auto* shaderProcessor = new ShaderProcessor(shaderIncludePaths);
         processorMap.emplace(".frag", shaderProcessor);
         processorMap.emplace(".vert", shaderProcessor);
+
+        auto* imageProcessor = new ImgProcessor();
+        processorMap.emplace(".png", imageProcessor);
+        processorMap.emplace(".jpg", imageProcessor);
+        processorMap.emplace(".jpeg", imageProcessor);
+        processorMap.emplace(".bmp", imageProcessor);
+        processorMap.emplace(".tga", imageProcessor);
 
         processorMap.emplace(".obj", new ObjProcessor());
     }

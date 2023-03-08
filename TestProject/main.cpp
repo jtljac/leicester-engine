@@ -15,7 +15,10 @@ void addActorsToScene(Scene* scene) {
     Mesh* mesh = new Mesh();
     mesh->loadMeshFromFile(FileUtils::getAssetsPath() + "/Monkey.lmesh");
 
-    Material* triangleMaterial = new Material("/meshtriangle.vert.spv", "/colourtriangle.frag.spv");
+    Texture* texture = Texture::createNewTextureFromFile(FileUtils::getAssetsPath() + "/wall.ltex");
+    std::vector<Texture*> texArray;
+    texArray.push_back(texture);
+    Material* triangleMaterial = new Material("/meshtriangle.vert.spv", "/colourtriangle.frag.spv", ShaderType::OPAQUE, texArray);
 
 
     Actor* collisionObject = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
