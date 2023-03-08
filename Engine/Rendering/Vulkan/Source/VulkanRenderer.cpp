@@ -1284,7 +1284,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
                 range
         };
 
-        vkCmdPipelineBarrier(transferCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+        vkCmdPipelineBarrier(transferCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                              nullptr, 0, nullptr, 1, &readableBarrier);
         vkEndCommandBuffer(transferCommandBuffer);
 
