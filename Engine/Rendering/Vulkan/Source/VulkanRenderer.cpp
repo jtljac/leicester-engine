@@ -40,12 +40,17 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
     if (!this->initVulkan(settings)) return false;
     if (!this->initSwapchain(settings)) return false;
 
+    if (!this->initGBuffers(settings)) return false;
+
     if (!this->initDescriptors(settings)) return false;
     if (!this->initFrameData(settings)) return false;
     if (!this->initTransferContext(settings)) return false;
 
-    if (!this->initRenderpass(settings)) return false;
-    if (!this->initFramebuffers(settings)) return false;
+    if (!this->initDeferredRenderpass(settings)) return false;
+    if (!this->initDeferredFramebuffers(settings)) return false;
+
+    if (!this->initCombinationRenderpass(settings)) return false;
+    if (!this->initCombinationFramebuffers(settings)) return false;
 
     // Initialise collision visualisation
     createMaterial(this->collisionMat);
@@ -214,53 +219,77 @@ bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
     for (int i = 0; i < swapchainImages.size(); ++i) {
         this->swapchainData[i].swapchainImage = swapchainImages[i];
         this->swapchainData[i].swapchainImageView = swapchainImageViews[i];
-
-        if (!this->initSwapchainDepthBuffer(settings, this->swapchainData[i])) return false;
     }
     return true;
 }
 
-bool VulkanRenderer::initSwapchainDepthBuffer(EngineSettings& settings, SwapchainData& swapchain) {
-    VkImageCreateInfo imageCreateInfo = {};
-    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.pNext = nullptr;
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format = this->depthFormat;
-    imageCreateInfo.extent = {settings.windowWidth, settings.windowHeight, 1};
-    imageCreateInfo.mipLevels = 1;
-    imageCreateInfo.arrayLayers = 1;
-    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+bool VulkanRenderer::initGBuffers(EngineSettings& settings) {
+    VkExtent3D gBufferExtent{settings.windowWidth, settings.windowHeight, 1};
 
-    VmaAllocationCreateInfo allocationCreateInfo = {};
-    allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-    allocationCreateInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    GBufferData* iter[] = {
+        &this->deferredFrameData.position,
+        &this->deferredFrameData.albedo,
+        &this->deferredFrameData.normal
+    };
 
-    VkImageViewCreateInfo imageViewCreateInfo = {};
-    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imageViewCreateInfo.pNext = nullptr;
-
-    imageViewCreateInfo.format = this->depthFormat;
-    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-    imageViewCreateInfo.subresourceRange.levelCount = 1;
-    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-    imageViewCreateInfo.subresourceRange.layerCount = 1;
-    imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-
-    vmaCreateImage(this->allocator, &imageCreateInfo, &allocationCreateInfo, &swapchain.depthImage.image,
-                   &swapchain.depthImage.allocation, nullptr);
-
-    imageViewCreateInfo.image = swapchain.depthImage.image;
-    if (vkCreateImageView(this->device, &imageViewCreateInfo, nullptr, &swapchain.depthImageView) != VK_SUCCESS) {
-        Logger::error("Failed to create depth imageview");
-        return false;
+    // Position, albedo, normal
+    for (GBufferData* gBufferData: iter) {
+        gBufferData->format = VK_FORMAT_R8G8B8A8_SRGB;
+        VKShortcuts::createAllocatedImage(this->allocator,
+                                          gBufferData->format,
+                                          gBufferExtent,
+                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                          VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                                          gBufferData->image);
+        
+        VKShortcuts::createImageView(this->device,
+                                     gBufferData->format,
+                                     gBufferData->image.image,
+                                     VK_IMAGE_ASPECT_COLOR_BIT,
+                                     gBufferData->imageView);
     }
+
+    // depth
+    {
+        GBufferData* gBufferData = &this->depthBuffer;
+        gBufferData->format = VK_FORMAT_D32_SFLOAT;
+        VKShortcuts::createAllocatedImage(this->allocator,
+                                          gBufferData->format,
+                                          gBufferExtent,
+                                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                          VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                                          gBufferData->image);
+
+        VKShortcuts::createImageView(this->device,
+                                     gBufferData->format,
+                                     gBufferData->image.image,
+                                     VK_IMAGE_ASPECT_DEPTH_BIT,
+                                     gBufferData->imageView);
+    }
+
     return true;
 }
 
 bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
+    // Descriptor Pool
+    std::vector<VkDescriptorPoolSize> sizes = {
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}
+    };
+
+    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
+    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptorPoolCreateInfo.pNext = nullptr;
+
+    descriptorPoolCreateInfo.flags = 0;
+    descriptorPoolCreateInfo.maxSets = 10;
+    descriptorPoolCreateInfo.poolSizeCount = (uint32_t) sizes.size();
+    descriptorPoolCreateInfo.pPoolSizes = sizes.data();
+
+    vkCreateDescriptorPool(this->device, &descriptorPoolCreateInfo, nullptr, &this->descriptorPool);
+
     // Global Descriptor
     {
         const size_t sceneParamBufferSize = settings.bufferCount * padUniformBufferSize(sizeof(GPUSceneData));
@@ -292,7 +321,7 @@ bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
         }
     }
 
-    // Pass Descriptor
+    // Deferred Pass Descriptor
     {
         std::array<VkDescriptorSetLayoutBinding, 1> bindings{{
             VKShortcuts::createDescriptorSetLayoutBinding(0,
@@ -308,29 +337,42 @@ bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
         passDescriptorSetLayoutCreateInfo.bindingCount = bindings.size();
         passDescriptorSetLayoutCreateInfo.pBindings = bindings.data();
         if (vkCreateDescriptorSetLayout(this->device, &passDescriptorSetLayoutCreateInfo, nullptr,
-                                    &this->passDescriptorSetLayout) != VK_SUCCESS){
-            Logger::error("Failed to create passDescriptorSetLayout");
+                                    &this->deferredPassDescriptorSetLayout) != VK_SUCCESS){
+            Logger::error("Failed to create deferred pass DescriptorSetLayout");
             return false;
         }
     }
 
-    std::vector<VkDescriptorPoolSize> sizes = {
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10},
-            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
-            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}
-    };
+    // Combination Pass Descriptor
+    {
+        std::array<VkDescriptorSetLayoutBinding, 4> bindings{{
+                VKShortcuts::createDescriptorSetLayoutBinding(0,
+                                                            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                                            VK_SHADER_STAGE_FRAGMENT_BIT),
+                VKShortcuts::createDescriptorSetLayoutBinding(1,
+                                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                                              VK_SHADER_STAGE_FRAGMENT_BIT),
+                VKShortcuts::createDescriptorSetLayoutBinding(2,
+                                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                                              VK_SHADER_STAGE_FRAGMENT_BIT),
+                VKShortcuts::createDescriptorSetLayoutBinding(3,
+                                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                                              VK_SHADER_STAGE_FRAGMENT_BIT),
+        }};
 
-    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
-    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.pNext = nullptr;
+        VkDescriptorSetLayoutCreateInfo passDescriptorSetLayoutCreateInfo = {};
+        passDescriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        passDescriptorSetLayoutCreateInfo.pNext = nullptr;
+        passDescriptorSetLayoutCreateInfo.flags = 0;
 
-    descriptorPoolCreateInfo.flags = 0;
-    descriptorPoolCreateInfo.maxSets = 10;
-    descriptorPoolCreateInfo.poolSizeCount = (uint32_t) sizes.size();
-    descriptorPoolCreateInfo.pPoolSizes = sizes.data();
-
-    vkCreateDescriptorPool(this->device, &descriptorPoolCreateInfo, nullptr, &this->descriptorPool);
+        passDescriptorSetLayoutCreateInfo.bindingCount = bindings.size();
+        passDescriptorSetLayoutCreateInfo.pBindings = bindings.data();
+        if (vkCreateDescriptorSetLayout(this->device, &passDescriptorSetLayoutCreateInfo, nullptr,
+                                        &this->combinationPassDescriptorSetLayout) != VK_SUCCESS){
+            Logger::error("Failed to create deferred pass DescriptorSetLayout");
+            return false;
+        }
+    }
 
     return true;
 }
@@ -357,23 +399,29 @@ bool VulkanRenderer::initFrameDataGraphicsPools(EngineSettings& settings, FrameD
     commandPoolCreateInfo.queueFamilyIndex = this->graphicsQueueIndex;
     commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.pNext = nullptr;
-
-    commandBufferAllocateInfo.commandBufferCount = 1;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
     if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &frameData.commandPool) != VK_SUCCESS) {
         Logger::error("Failed to create frameData command pool");
         return false;
     }
 
+
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAllocateInfo.pNext = nullptr;
+
     commandBufferAllocateInfo.commandPool = frameData.commandPool;
-    if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &frameData.commandBuffer) != VK_SUCCESS) {
+    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    commandBufferAllocateInfo.commandBufferCount = 2;
+
+    VkCommandBuffer buffers[2];
+
+    if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, buffers) != VK_SUCCESS) {
         Logger::error("Failed to create frameData command buffer");
         return false;
     }
+
+    frameData.deferredCommandBuffer = buffers[0];
+    frameData.combinationCommandBuffer = buffers[1];
 
     return true;
 }
@@ -431,7 +479,7 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
         vkAllocateDescriptorSets(this->device, &globalDescriptorSetAllocateInfo, &frameData.globalDescriptor);
     }
 
-    // Pass Descriptor
+    // Deferred Pass Descriptor
     {
         VkDescriptorSetAllocateInfo passDescriptorSetAllocateInfo = {};
         passDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -439,9 +487,22 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
 
         passDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
         passDescriptorSetAllocateInfo.descriptorSetCount = 1;
-        passDescriptorSetAllocateInfo.pSetLayouts = &this->passDescriptorSetLayout;
+        passDescriptorSetAllocateInfo.pSetLayouts = &this->deferredPassDescriptorSetLayout;
 
-        vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.passDescriptor);
+        vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.deferredPassDescriptor);
+    }
+
+    // Combination Pass Descriptor
+    {
+        VkDescriptorSetAllocateInfo passDescriptorSetAllocateInfo = {};
+        passDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        passDescriptorSetAllocateInfo.pNext = nullptr;
+
+        passDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
+        passDescriptorSetAllocateInfo.descriptorSetCount = 1;
+        passDescriptorSetAllocateInfo.pSetLayouts = &this->combinationPassDescriptorSetLayout;
+
+        vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.combinationPassDescriptor);
     }
 
     VkDescriptorBufferInfo cameraInfo;
@@ -462,7 +523,7 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
     VkWriteDescriptorSet cameraWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo);
     VkWriteDescriptorSet sceneWrite = VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo);
 
-    VkWriteDescriptorSet objectWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.passDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo);
+    VkWriteDescriptorSet objectWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.deferredPassDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo);
 
     VkWriteDescriptorSet setWrites[] = {cameraWrite, sceneWrite, objectWrite};
 
@@ -511,7 +572,7 @@ bool VulkanRenderer::initTransferContext(EngineSettings& settings) {
 
         // Graphics Pool
         commandPoolCreateInfo.queueFamilyIndex = this->graphicsQueueIndex;
-        if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &transferContext.graphicsCommandPool) != VK_SUCCESS) {
+        if (vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr, &globalGraphicsContext.commandPool) != VK_SUCCESS) {
             Logger::error("Failed to create transferContext graphics command pool");
             return false;
         }
@@ -531,8 +592,8 @@ bool VulkanRenderer::initTransferContext(EngineSettings& settings) {
         }
 
         // Graphics Buffer
-        commandBufferAllocateInfo.commandPool = transferContext.graphicsCommandPool;
-        if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &transferContext.graphicsCommandBuffer) != VK_SUCCESS) {
+        commandBufferAllocateInfo.commandPool = globalGraphicsContext.commandPool;
+        if (vkAllocateCommandBuffers(this->device, &commandBufferAllocateInfo, &globalGraphicsContext.commandBuffer) != VK_SUCCESS) {
             Logger::error("Failed to create transferContext graphics command buffer");
             return false;
         }
@@ -541,8 +602,165 @@ bool VulkanRenderer::initTransferContext(EngineSettings& settings) {
     return true;
 }
 
+bool VulkanRenderer::initDeferredRenderpass(EngineSettings& settings) {
+    std::array<VkAttachmentDescription, 4> attachments{{
+        {
+                0,
+                this->deferredFrameData.position.format,
+                VK_SAMPLE_COUNT_1_BIT,
+                VK_ATTACHMENT_LOAD_OP_CLEAR,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        },
+        {
+                0,
+                this->deferredFrameData.albedo.format,
+                VK_SAMPLE_COUNT_1_BIT,
+                VK_ATTACHMENT_LOAD_OP_CLEAR,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        },
+        {
+                0,
+                this->deferredFrameData.normal.format,
+                VK_SAMPLE_COUNT_1_BIT,
+                VK_ATTACHMENT_LOAD_OP_CLEAR,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        },
 
-bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
+        {
+                0,
+                this->depthBuffer.format,
+                VK_SAMPLE_COUNT_1_BIT,
+                VK_ATTACHMENT_LOAD_OP_CLEAR,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL
+        }
+    }};
+
+    std::array<VkAttachmentReference, 3> attachmentReferences = {{
+            {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+            {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+            {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+    }};
+    VkAttachmentReference depthAttachmentReference{3, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+
+    std::array<VkSubpassDependency, 4> subpassDependencies = {{
+
+            {
+                    VK_SUBPASS_EXTERNAL,
+                    0,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    0,
+                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                    VK_DEPENDENCY_BY_REGION_BIT
+            },
+            // Ensure depth doesn't overlap
+            {
+                    VK_SUBPASS_EXTERNAL,
+                    0,
+                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                    0,
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                    VK_DEPENDENCY_BY_REGION_BIT
+            },
+            // Transition GBuffers to readable
+            {
+                    0,
+                    VK_SUBPASS_EXTERNAL,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                    VK_ACCESS_MEMORY_READ_BIT,
+                    VK_DEPENDENCY_BY_REGION_BIT
+            },
+            // Transition depth buffer to something readable in a shader
+            {
+                    0,
+                    VK_SUBPASS_EXTERNAL,
+                    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                    VK_ACCESS_SHADER_READ_BIT,
+                    VK_DEPENDENCY_BY_REGION_BIT
+            }
+    }};
+
+    VkSubpassDescription subpass = {};
+    {
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = attachmentReferences.size();
+        subpass.pColorAttachments = attachmentReferences.data();
+        subpass.pDepthStencilAttachment = &depthAttachmentReference;
+    }
+
+    VkRenderPassCreateInfo renderPassCreateInfo = {};
+    {
+        renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+
+        renderPassCreateInfo.attachmentCount = attachments.size();
+        renderPassCreateInfo.pAttachments = attachments.data();
+
+        renderPassCreateInfo.subpassCount = 1;
+        renderPassCreateInfo.pSubpasses = &subpass;
+
+        renderPassCreateInfo.dependencyCount = subpassDependencies.size();
+        renderPassCreateInfo.pDependencies = subpassDependencies.data();
+    }
+
+    if (vkCreateRenderPass(this->device, &renderPassCreateInfo, nullptr, &deferredRenderpass) != VK_SUCCESS) {
+        Logger::error("Failed to create deferred renderpass");
+        return false;
+    }
+    return true;
+}
+
+bool VulkanRenderer::initDeferredFramebuffers(EngineSettings& settings) {
+    VkFramebufferCreateInfo framebufferCreateInfo = {};
+    framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferCreateInfo.pNext = nullptr;
+
+    framebufferCreateInfo.renderPass = this->deferredRenderpass;
+
+    std::array<VkImageView, 4> attachments{{
+        this->deferredFrameData.position.imageView,
+        this->deferredFrameData.albedo.imageView,
+        this->deferredFrameData.normal.imageView,
+        this->depthBuffer.imageView
+    }};
+
+    framebufferCreateInfo.attachmentCount = attachments.size();
+    framebufferCreateInfo.pAttachments = attachments.data();
+
+    framebufferCreateInfo.width = settings.windowWidth;
+    framebufferCreateInfo.height = settings.windowHeight;
+    framebufferCreateInfo.layers = 1;
+
+
+    if (vkCreateFramebuffer(this->device, &framebufferCreateInfo, nullptr, &this->deferredFrameData.framebuffer) != VK_SUCCESS) {
+        Logger::error("Failed to create deferred framebuffer");
+        return false;
+    }
+
+    return true;
+}
+
+bool VulkanRenderer::initCombinationRenderpass(EngineSettings& settings) {
     VkAttachmentDescription colourAttachment = {};
     {
         colourAttachment.format = this->swapchainImageFormat;
@@ -575,87 +793,53 @@ bool VulkanRenderer::initRenderpass(EngineSettings& settings) {
 
     }
 
-    VkAttachmentDescription depthAttachment = {};
-    {
-        depthAttachment.flags = 0;
-
-        depthAttachment.format = this->depthFormat;
-        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-
-        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
-    }
-
-    VkAttachmentReference depthAttachmentReference = {};
-    {
-        depthAttachmentReference.attachment = 1;
-        depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    }
-
-    VkSubpassDependency depthSubpassDependency = {};
-    {
-        depthSubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        depthSubpassDependency.dstSubpass = 0;
-        depthSubpassDependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        depthSubpassDependency.srcAccessMask = 0;
-        depthSubpassDependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        depthSubpassDependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    }
-
     VkSubpassDescription subpass = {};
     {
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colourAttachmentReference;
-        subpass.pDepthStencilAttachment = &depthAttachmentReference;
+        subpass.pDepthStencilAttachment = nullptr;
     }
 
-    VkAttachmentDescription attachments[2] = {colourAttachment, depthAttachment};
-    VkSubpassDependency dependencies[2] = {colourSubpassDependency, depthSubpassDependency};
     VkRenderPassCreateInfo renderPassCreateInfo = {};
     {
         renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 
-        renderPassCreateInfo.attachmentCount = 2;
-        renderPassCreateInfo.pAttachments = attachments;
+        renderPassCreateInfo.attachmentCount = 1;
+        renderPassCreateInfo.pAttachments = &colourAttachment;
 
         renderPassCreateInfo.subpassCount = 1;
         renderPassCreateInfo.pSubpasses = &subpass;
 
-        renderPassCreateInfo.dependencyCount = 2;
-        renderPassCreateInfo.pDependencies = dependencies;
+        renderPassCreateInfo.dependencyCount = 1;
+        renderPassCreateInfo.pDependencies = &colourSubpassDependency;
     }
 
-    if (vkCreateRenderPass(this->device, &renderPassCreateInfo, nullptr, &renderPass) != VK_SUCCESS) {
-        Logger::error("Failed to create renderpass");
+    if (vkCreateRenderPass(this->device, &renderPassCreateInfo, nullptr, &combinationRenderpass) != VK_SUCCESS) {
+        Logger::error("Failed to create combination renderpass");
         return false;
     }
 
     return true;
 }
 
-bool VulkanRenderer::initFramebuffers(EngineSettings& settings) {
+
+
+bool VulkanRenderer::initCombinationFramebuffers(EngineSettings& settings) {
     VkFramebufferCreateInfo framebufferCreateInfo = {};
     framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferCreateInfo.pNext = nullptr;
 
-    framebufferCreateInfo.renderPass = this->renderPass;
-    framebufferCreateInfo.attachmentCount = 2;
+    framebufferCreateInfo.renderPass = this->combinationRenderpass;
+    framebufferCreateInfo.attachmentCount = 1;
     framebufferCreateInfo.width = settings.windowWidth;
     framebufferCreateInfo.height = settings.windowHeight;
     framebufferCreateInfo.layers = 1;
 
     for (SwapchainData& swapchain : this->swapchainData) {
-        VkImageView attachments[2] = {swapchain.swapchainImageView, swapchain.depthImageView};
-        framebufferCreateInfo.pAttachments = attachments;
+        framebufferCreateInfo.pAttachments = &swapchain.swapchainImageView;
         if (vkCreateFramebuffer(this->device, &framebufferCreateInfo, nullptr, &swapchain.framebuffer) != VK_SUCCESS) {
-            Logger::error("Failed to create framebuffer");
+            Logger::error("Failed to create combination framebuffer");
             return false;
         }
     }
@@ -706,7 +890,7 @@ void VulkanRenderer::cleanup() {
 
     vmaDestroyBuffer(this->allocator, sceneParamsBuffer.buffer, sceneParamsBuffer.allocation);
 
-    vkDestroyRenderPass(this->device, this->renderPass, nullptr);
+    vkDestroyRenderPass(this->device, this->combinationRenderpass, nullptr);
 
     // Cleanup frameData
     for (FrameData& data : this->frameData) {
@@ -722,7 +906,7 @@ void VulkanRenderer::cleanup() {
 
     vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(this->device, this->globalDescriptorSetLayout, nullptr);
-    vkDestroyDescriptorSetLayout(this->device, this->passDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(this->device, this->deferredPassDescriptorSetLayout, nullptr);
 
     vmaDestroyAllocator(this->allocator);
 
@@ -760,7 +944,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
 
     SwapchainData swapchain = swapchainData[swapchainIndex];
 
-    vkResetCommandBuffer(frame.commandBuffer, 0);
+    vkResetCommandBuffer(frame.deferredCommandBuffer, 0);
 
     VkCommandBufferBeginInfo commandBufferBeginInfo = {};
     commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -768,7 +952,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     commandBufferBeginInfo.pInheritanceInfo = nullptr;
 
     commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(frame.commandBuffer, &commandBufferBeginInfo);
+    vkBeginCommandBuffer(frame.deferredCommandBuffer, &commandBufferBeginInfo);
 
     VkClearValue clearValues[2];
     float flash = (float) std::abs(std::sin(gameTime));
@@ -781,7 +965,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassBeginInfo.pNext = nullptr;
 
-    renderPassBeginInfo.renderPass = this->renderPass;
+    renderPassBeginInfo.renderPass = this->combinationRenderpass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
     renderPassBeginInfo.renderArea.extent = {1366, 768};
@@ -792,7 +976,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
 
     // Renderpass
     {
-        vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBeginRenderPass(frame.deferredCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         // Camera Buffer
         {
@@ -852,14 +1036,14 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
             if (prevVMat != mesh.material->materialId) {
                 prevVMat = mesh.material->materialId;
 
-                vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+                vkCmdBindPipeline(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
 
                 uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
-                vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
                                         0, 1, &frame.globalDescriptor, 1, &uniformOffset);
-                vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
-                                        1, 1, &frame.passDescriptor, 0, nullptr);
-                vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                        1, 1, &frame.deferredPassDescriptor, 0, nullptr);
+                vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
                                         2, 1, &vMat.materialDescriptor, 0, nullptr);
             }
 
@@ -867,17 +1051,17 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
             AllocatedBuffer indBuffer = this->bufferList.get(mesh.mesh->indicesId);
 
             VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
-            vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(frame.deferredCommandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+            vkCmdBindIndexBuffer(frame.deferredCommandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
 
-            vkCmdDrawIndexed(frame.commandBuffer, mesh.mesh->indices.size(), 1, 0, 0, i);
+            vkCmdDrawIndexed(frame.deferredCommandBuffer, mesh.mesh->indices.size(), 1, 0, 0, i);
         }
 
         VMaterial vMat = materialList.get(collisionMat.materialId);
-        vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+        vkCmdBindPipeline(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
 
         uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
-        vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+        vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
                                 0, 1, &frame.globalDescriptor, 1, &uniformOffset);
 
         for (int i = 0; i < toRenderCollision.size(); ++i) {
@@ -888,8 +1072,8 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
             AllocatedBuffer indBuffer = this->bufferList.get(mesh->indicesId);
 
             VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &vertBuffer.buffer, &offset);
-            vkCmdBindIndexBuffer(frame.commandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(frame.deferredCommandBuffer, 0, 1, &vertBuffer.buffer, &offset);
+            vkCmdBindIndexBuffer(frame.deferredCommandBuffer, indBuffer.buffer, offset, VkIndexType::VK_INDEX_TYPE_UINT32);
 
             MeshPushConstants pushConstants = {
                     {},
@@ -897,15 +1081,15 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
                         ? glm::vec4(0.f, 1.f, 0.f, 1.f)
                         : glm::vec4(1.f, 0.f, 0.f, 1.f)
             };
-            vkCmdPushConstants(frame.commandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+            vkCmdPushConstants(frame.deferredCommandBuffer, vMat.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                                sizeof(pushConstants), &pushConstants);
 
-            vkCmdDrawIndexed(frame.commandBuffer, mesh->indices.size(), 1, 0, 0, i + toRender.size());
+            vkCmdDrawIndexed(frame.deferredCommandBuffer, mesh->indices.size(), 1, 0, 0, i + toRender.size());
         }
 
-        vkCmdEndRenderPass(frame.commandBuffer);
+        vkCmdEndRenderPass(frame.deferredCommandBuffer);
     }
-    vkEndCommandBuffer(frame.commandBuffer);
+    vkEndCommandBuffer(frame.deferredCommandBuffer);
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -922,7 +1106,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     submitInfo.pSignalSemaphores = &frame.renderSemaphore;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &frame.commandBuffer;
+    submitInfo.pCommandBuffers = &frame.deferredCommandBuffer;
 
     vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, frame.renderFence);
 
@@ -988,7 +1172,7 @@ VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer,
         // Command Buffer
     VkResult result;
     {
-        result = function(transferContext.commandBuffer, transferContext.graphicsCommandBuffer);
+        result = function(transferContext.commandBuffer, globalGraphicsContext.commandBuffer);
     }
     VkSubmitInfo transferSubmitInfo {
         VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -1012,7 +1196,7 @@ VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer,
         &transferContext.transferSemaphore,
         nullptr,
         1,
-        &transferContext.graphicsCommandBuffer,
+        &globalGraphicsContext.commandBuffer,
         0,
         nullptr
     };
@@ -1022,7 +1206,7 @@ VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer,
     vkResetFences(this->device, 1, &transferContext.transferFence);
 
     vkResetCommandPool(this->device, transferContext.commandPool, 0);
-    vkResetCommandPool(this->device, transferContext.graphicsCommandPool, 0);
+    vkResetCommandPool(this->device, globalGraphicsContext.commandPool, 0);
 
     return result;
 }
@@ -1077,21 +1261,6 @@ AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlag
     }
 
     return allocatedBuffer;
-}
-
-AllocatedImage VulkanRenderer::createImage(VkImageCreateInfo& imageCreateInfo, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage) {
-    VkBufferCreateInfo bufferCreateInfo = {};
-    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.pNext = nullptr;
-
-    VmaAllocationCreateInfo allocationCreateInfo = {};
-    allocationCreateInfo.flags = flags;
-    allocationCreateInfo.usage = memoryUsage;
-
-    AllocatedImage allocatedImage;
-    vmaCreateImage(this->allocator, &imageCreateInfo, &allocationCreateInfo, &allocatedImage.image, &allocatedImage.allocation, nullptr);
-
-    return allocatedImage;
 }
 
 void VulkanRenderer::uploadMesh(Mesh& mesh) {
@@ -1166,48 +1335,19 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
             1
     };
 
-    VkImageCreateInfo imageCreateInfo = {};
-    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.pNext = nullptr;
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format = format;
-    imageCreateInfo.extent = textureExtent;
-    imageCreateInfo.mipLevels = 1;
-    imageCreateInfo.arrayLayers = 1;
-    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-
     VTexture vTexture;
-    vTexture.image = createImage(imageCreateInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
-
-    VkImageViewCreateInfo imageViewCreateInfo {
-        VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        nullptr,
-
-        0,
-        vTexture.image.image,
-        VK_IMAGE_VIEW_TYPE_2D,
-        format,
-        {
-            VK_COMPONENT_SWIZZLE_R,
-            VK_COMPONENT_SWIZZLE_G,
-            VK_COMPONENT_SWIZZLE_B,
-            VK_COMPONENT_SWIZZLE_A
-        },
-        {
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            0,
-            1,
-            0,
-            1
-        }
-    };
-
-    vkCreateImageView(this->device, &imageViewCreateInfo, nullptr, &vTexture.imageView);
-
+    VKShortcuts::createAllocatedImage(this->allocator,
+                                      format,
+                                      textureExtent,
+                                      VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                      0,
+                                      vTexture.image);
+    VKShortcuts::createImageView(this->device,
+                                 format,
+                                 vTexture.image.image,
+                                 VK_IMAGE_ASPECT_COLOR_BIT,
+                                 vTexture.imageView);
+    
     {
         VkSamplerCreateInfo samplerCreateInfo{};
         samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -1329,7 +1469,7 @@ bool VulkanRenderer::createMaterial(Material& material) {
 
         pipelineLayoutCreateInfo.flags = 0;
 
-        VkDescriptorSetLayout setLayouts[] = {this->globalDescriptorSetLayout, this->passDescriptorSetLayout, materialLayout};
+        VkDescriptorSetLayout setLayouts[] = {this->globalDescriptorSetLayout, this->deferredPassDescriptorSetLayout, materialLayout};
 
         pipelineLayoutCreateInfo.setLayoutCount = 3;
         pipelineLayoutCreateInfo.pSetLayouts = setLayouts;
@@ -1350,7 +1490,7 @@ bool VulkanRenderer::createMaterial(Material& material) {
     }
 
     VertexDescription vertexDescription = VertexDescription::getVertexDescription();
-    PipelineBuilder builder = PipelineBuilder(this->device, this->renderPass, pipelineLayout)
+    PipelineBuilder builder = PipelineBuilder(this->device, this->combinationRenderpass, pipelineLayout)
             .setVertexInputInfo(vertexDescription)
             .setInputAssemblyInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
             .setViewport(0.f, 0.f, (float) this->settings->windowWidth, (float) this->settings->windowHeight)

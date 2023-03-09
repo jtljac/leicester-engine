@@ -6,7 +6,7 @@ target_sources(leicester-engine PRIVATE
         Source/DeletionQueue.cpp
         Source/VertexDescription.cpp
         Source/VMaterial.cpp
-        Source/FrameData.cpp
+        Source/FrameStructures.cpp
         Source/VkShortcuts.cpp
         Source/VTexture.cpp
 )

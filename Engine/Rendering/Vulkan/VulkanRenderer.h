@@ -28,7 +28,7 @@
 #include "DeletionQueue.h"
 #include "AllocationStructures.h"
 #include "VMaterial.h"
-#include "FrameData.h"
+#include "FrameStructures.h"
 #include "VTexture.h"
 
 struct TransferContext {
@@ -36,8 +36,11 @@ struct TransferContext {
     VkSemaphore transferSemaphore = VK_NULL_HANDLE;
     VkCommandPool commandPool = VK_NULL_HANDLE;
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-    VkCommandPool graphicsCommandPool = VK_NULL_HANDLE;
-    VkCommandBuffer graphicsCommandBuffer = VK_NULL_HANDLE;
+};
+
+struct GlobalGraphicsContext {
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 };
 
 class VulkanRenderer : public Renderer {
@@ -65,16 +68,21 @@ class VulkanRenderer : public Renderer {
     VkSwapchainKHR swapchainHandle = VK_NULL_HANDLE;    // Swap Chain handle
     VkFormat swapchainImageFormat;                      // The format of the swapchainHandle
 
-    // Depth Buffer
-    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;        // The format of the depth buffer
+    // GBuffers
+    DeferredFrameData deferredFrameData{};
+    GBufferData depthBuffer{};
 
     // Renderpass
-    VkRenderPass renderPass = VK_NULL_HANDLE;           // The renderpass handle
+    VkRenderPass deferredRenderpass = VK_NULL_HANDLE;           // The renderpass that builds the GBuffers
+    VkRenderPass combinationRenderpass = VK_NULL_HANDLE;        // The renderpass that combines the GBuffers
 
-    // Descriptor Set
-    VkDescriptorSetLayout globalDescriptorSetLayout = VK_NULL_HANDLE;   // Descriptor set layout for global data
-    VkDescriptorSetLayout passDescriptorSetLayout = VK_NULL_HANDLE;     // Descriptor set layout for pass data
+    // Descriptor Sets
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;                   // Pool of which descriptor sets are allocated to
+    // Global
+    VkDescriptorSetLayout globalDescriptorSetLayout = VK_NULL_HANDLE;   // Descriptor set layout for global data
+    // Pass
+    VkDescriptorSetLayout deferredPassDescriptorSetLayout = VK_NULL_HANDLE;     // Descriptor set layout for pass data during the deferred pass
+    VkDescriptorSetLayout combinationPassDescriptorSetLayout = VK_NULL_HANDLE;  // Descriptor set layout for pass data during the combination pass
 
     // Scene data
     GPUSceneData sceneParams{};
@@ -93,9 +101,9 @@ class VulkanRenderer : public Renderer {
     IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
     Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", ShaderType::WIREFRAME);
 
-    // Transfer
-    TransferContext transferContext{};    // The object containing transfer structures
-
+    // Queue Structures
+    TransferContext transferContext{};              // Context for transfer operations
+    GlobalGraphicsContext globalGraphicsContext{};  // Context for global operations with the graphics queue
 protected:
     /**
      * Required validation layers when running in debug mode
@@ -148,7 +156,7 @@ private:
 
     /**
      * Initialises the graphics pools in the provided FrameData
-     * Populates commandPool and commandBuffer
+     * Populates commandPool and deferredCommandBuffer
      * @param settings the engine settings
      * @param frameData the FrameData object being populated
      * @param graphicsQueueIndex the index of the graphics queue used for the command pools
@@ -191,36 +199,48 @@ private:
     bool initSwapchain(EngineSettings& settings);
 
     /**
-     * Sets up the depth buffers for the given SwapchainData
+     * Sets up the gbuffers buffers
      * Populates depthImage & depthImageView
      * @param settings the engine settings
-     * @param swapchain the SwapchainData being populated
      * @return True if successful
      */
-    bool initSwapchainDepthBuffer(EngineSettings& settings, SwapchainData& swapchain);
+    bool initGBuffers(EngineSettings& settings);
 
     /**
-     * Setup the framebuffers used for rendering to for the given SwapchainData
-     * Populates framebuffer
+     * Setup the render pass that populates the deferred framebuffers
+     * Populates deferredRenderpass
      * @param settings the engine settings
-     * @param swapchain the SwapchainData being populated
      * @return True if successful
      */
-    bool initFramebuffers(EngineSettings& settings);
+    bool initDeferredRenderpass(EngineSettings& settings);
 
     /**
-     * Setup the render pass
-     * Populates renderpass
+     * Setup the framebuffers used for rendering the deferred pass
      * @param settings the engine settings
-     * @return
+     * @return True if successful
      */
-    bool initRenderpass(EngineSettings& settings);
+    bool initDeferredFramebuffers(EngineSettings& settings);
+
+    /**
+     * Setup the render pass that combines the deferred framebuffers
+     * Populates combinationRenderpass
+     * @param settings the engine settings
+     * @return True if successful
+     */
+    bool initCombinationRenderpass(EngineSettings& settings);
+
+    /**
+     * Setup the framebuffers used for combining the gbuffers to the swapchain
+     * @param settings the engine settings
+     * @return True if successful
+     */
+    bool initCombinationFramebuffers(EngineSettings& settings);
 
     // Resource Handling
 
     /**
      * Immediately submit commands on the transfer queue
-     * @param function A function that executes commands on the commandBuffer
+     * @param function A function that executes commands on the deferredCommandBuffer
      */
     [[maybe_unused]] VkResult executeTransfer(std::function<VkResult(VkCommandBuffer commandBuffer)>&& function);
 
@@ -251,15 +271,6 @@ private:
      * @return The allocated buffer representing the allocated gpu memory
      */
     AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO);
-
-    /**
-     * Allocate an image on the GPU
-     * @param imageCreateInfo The image info
-     * @param flags The allocation flags
-     * @param memoryUsage The VMA Memory usage flags
-     * @return The allocated image representing the allocated gpu image
-     */
-    AllocatedImage createImage(VkImageCreateInfo& imageCreateInfo, VmaAllocationCreateFlags flags, VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO);
 
     /**
      * Upload a mesh to the GPU

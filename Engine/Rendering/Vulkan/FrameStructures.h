@@ -16,11 +16,13 @@ struct FrameData {
 
     // Commands
     VkCommandPool commandPool;
-    VkCommandBuffer commandBuffer;
+    VkCommandBuffer deferredCommandBuffer;
+    VkCommandBuffer combinationCommandBuffer;
 
     // Descriptor Sets
     VkDescriptorSet globalDescriptor;
-    VkDescriptorSet passDescriptor;
+    VkDescriptorSet deferredPassDescriptor;
+    VkDescriptorSet combinationPassDescriptor;
 
     // Buffers
     AllocatedBuffer cameraBuffer;
@@ -37,4 +39,16 @@ struct SwapchainData {
     VkImageView depthImageView;
 
     VkFramebuffer framebuffer;
+};
+
+struct GBufferData {
+    VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+    AllocatedImage image{};
+    VkImageView imageView = VK_NULL_HANDLE;
+};
+
+struct DeferredFrameData {
+    VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    GBufferData position{}, normal{}, albedo{};
+    VkSemaphore deferredSemaphore = VK_NULL_HANDLE;
 };

@@ -48,3 +48,55 @@ VKShortcuts::createWriteDescriptorSetImage(uint32_t binding, VkDescriptorSet set
 
     return writeDescriptorSet;
 }
+
+bool VKShortcuts::createAllocatedImage(VmaAllocator allocator, VkFormat format, VkExtent3D extent,
+                                       VkImageUsageFlags imageUsage, VmaAllocationCreateFlags memoryFlags,
+                                       AllocatedImage& outAllocatedImage) {
+    VkImageCreateInfo imageCreateInfo = {};
+    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.pNext = nullptr;
+
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.format = format;
+    imageCreateInfo.extent = extent;
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCreateInfo.usage = imageUsage;
+
+    VkBufferCreateInfo bufferCreateInfo = {};
+    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCreateInfo.pNext = nullptr;
+
+    VmaAllocationCreateInfo allocationCreateInfo = {};
+    allocationCreateInfo.flags = memoryFlags;
+    allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+    return vmaCreateImage(allocator, &imageCreateInfo, &allocationCreateInfo, &outAllocatedImage.image, &outAllocatedImage.allocation, nullptr) == VK_SUCCESS;
+}
+
+bool VKShortcuts::createImageView(VkDevice device, VkFormat format, VkImage image, VkImageAspectFlags aspectMask,
+                                  VkImageView& outImageView) {
+
+    VkImageViewCreateInfo imageViewCreateInfo{};
+    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewCreateInfo.pNext = nullptr;
+
+    imageViewCreateInfo.image = image;
+    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewCreateInfo.format = format;
+    imageViewCreateInfo.components = {
+            VK_COMPONENT_SWIZZLE_R,
+            VK_COMPONENT_SWIZZLE_G,
+            VK_COMPONENT_SWIZZLE_B,
+            VK_COMPONENT_SWIZZLE_A
+    };
+    imageViewCreateInfo.subresourceRange.aspectMask = aspectMask;
+    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+    imageViewCreateInfo.subresourceRange.levelCount = 1;
+    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+    imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+    return vkCreateImageView(device, &imageViewCreateInfo, nullptr, &outImageView) == VK_SUCCESS;
+}
