@@ -46,18 +46,21 @@ PipelineBuilder& PipelineBuilder::setVertexInputInfoDefault() {
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::setVertexInputInfo(VertexDescription& vertexDescription) {
+PipelineBuilder& PipelineBuilder::setVertexInputInfo(VertexDescription vertexDescription) {
     VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
+
+    this->vertexDescription = std::move(vertexDescription);
+
     vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputStateCreateInfo.pNext = nullptr;
 
-    vertexInputStateCreateInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
-    vertexInputStateCreateInfo.vertexAttributeDescriptionCount = vertexDescription.attributes.size();
+    vertexInputStateCreateInfo.vertexBindingDescriptionCount = this->vertexDescription.bindings.size();
+    vertexInputStateCreateInfo.vertexAttributeDescriptionCount = this->vertexDescription.attributes.size();
 
-    vertexInputStateCreateInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
-    vertexInputStateCreateInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
+    vertexInputStateCreateInfo.pVertexBindingDescriptions = this->vertexDescription.bindings.data();
+    vertexInputStateCreateInfo.pVertexAttributeDescriptions = this->vertexDescription.attributes.data();
 
-    vertexInputStateCreateInfo.flags = vertexDescription.flags;
+    vertexInputStateCreateInfo.flags = this->vertexDescription.flags;
 
     this->vertexInputInfo = vertexInputStateCreateInfo;
     return *this;
@@ -172,7 +175,7 @@ PipelineBuilder& PipelineBuilder::setMultisampleState(VkPipelineMultisampleState
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::setColourBlendAttachmentDefault() {
+PipelineBuilder& PipelineBuilder::addColourBlendAttachmentDefaultNoBlend() {
     VkPipelineColorBlendAttachmentState colourBlendAttachmentState = {};
     colourBlendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
             | VK_COLOR_COMPONENT_B_BIT
@@ -181,13 +184,19 @@ PipelineBuilder& PipelineBuilder::setColourBlendAttachmentDefault() {
 
     colourBlendAttachmentState.blendEnable = VK_FALSE;
 
-    this->colourBlendAttachment = colourBlendAttachmentState;
+    this->colourBlendAttachments.push_back(colourBlendAttachmentState);
 
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::setColourBlendAttachment(VkPipelineColorBlendAttachmentState& colourBlendAttachmentState) {
-    this->colourBlendAttachment = colourBlendAttachmentState;
+PipelineBuilder& PipelineBuilder::addColourBlendAttachment(VkPipelineColorBlendAttachmentState& colourBlendAttachmentState) {
+    this->colourBlendAttachments.push_back(colourBlendAttachmentState);
+
+    return *this;
+}
+
+PipelineBuilder& PipelineBuilder::clearColourBlendAttachments() {
+    this->colourBlendAttachments.clear();
 
     return *this;
 }
@@ -254,8 +263,8 @@ std::optional<VkPipeline> PipelineBuilder::buildPipeline() {
 
         colorBlendStateCreateInfo.logicOpEnable = VK_FALSE;
         colorBlendStateCreateInfo.logicOp = VK_LOGIC_OP_COPY;
-        colorBlendStateCreateInfo.attachmentCount = 1;
-        colorBlendStateCreateInfo.pAttachments = &this->colourBlendAttachment;
+        colorBlendStateCreateInfo.attachmentCount = this->colourBlendAttachments.size();
+        colorBlendStateCreateInfo.pAttachments = this->colourBlendAttachments.data();
     }
 
 

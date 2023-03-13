@@ -100,6 +100,10 @@ class VulkanRenderer : public Renderer {
     IDTrackedResource<uint64_t, VTexture> imageList;      // Stores Allocated Images against an ID
     IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
     Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", ShaderType::WIREFRAME);
+    Material combinationMat = Material("/Deferred-Pipeline/combination.vert.spv", "/Deferred-Pipeline/combination.frag.spv", ShaderType::COMBINATION);
+
+    // Global Samplers
+    VkSampler colourSampler = VK_NULL_HANDLE;
 
     // Queue Structures
     TransferContext transferContext{};              // Context for transfer operations
@@ -183,6 +187,13 @@ private:
     void initFrameDataDescriptorSets(EngineSettings& settings, FrameData& frameData);
 
     /**
+     * Initialises the semaphores for synchronising the deferred and combination renderpasses
+     * @param settings the engine settings
+     * @return True if successful
+     */
+    bool deferredSyncObjects(EngineSettings& settings);
+
+    /**
      * Initialises the structures used for transfer operations between the CPU and GPU
      * Populates transferContext
      * @param settings the engine settings
@@ -205,6 +216,13 @@ private:
      * @return True if successful
      */
     bool initGBuffers(EngineSettings& settings);
+
+    /**
+     * Sets up the default samplers
+     * @param settings the engine settings
+     * @return True if successful
+     */
+    bool initSamplers(EngineSettings& settings);
 
     /**
      * Setup the render pass that populates the deferred framebuffers

@@ -42,8 +42,12 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
 
     if (!this->initGBuffers(settings)) return false;
 
+    if (!this->initSamplers(settings)) return false;
+
     if (!this->initDescriptors(settings)) return false;
     if (!this->initFrameData(settings)) return false;
+    if (!this->deferredSyncObjects(settings)) return false;
+
     if (!this->initTransferContext(settings)) return false;
 
     if (!this->initDeferredRenderpass(settings)) return false;
@@ -54,6 +58,7 @@ bool VulkanRenderer::initialise(EngineSettings& settings) {
 
     // Initialise collision visualisation
     createMaterial(this->collisionMat);
+    createMaterial(this->combinationMat);
 
     return true;
 }
@@ -238,7 +243,7 @@ bool VulkanRenderer::initGBuffers(EngineSettings& settings) {
         VKShortcuts::createAllocatedImage(this->allocator,
                                           gBufferData->format,
                                           gBufferExtent,
-                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                                           VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                                           gBufferData->image);
         
@@ -256,7 +261,7 @@ bool VulkanRenderer::initGBuffers(EngineSettings& settings) {
         VKShortcuts::createAllocatedImage(this->allocator,
                                           gBufferData->format,
                                           gBufferExtent,
-                                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                                           VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                                           gBufferData->image);
 
@@ -268,6 +273,20 @@ bool VulkanRenderer::initGBuffers(EngineSettings& settings) {
     }
 
     return true;
+}
+
+bool VulkanRenderer::initSamplers(EngineSettings& settings) {
+    VkSamplerCreateInfo samplerCreateInfo{};
+    samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCreateInfo.pNext = nullptr;
+
+    samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
+    samplerCreateInfo.minFilter = VK_FILTER_NEAREST;
+    samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+    return vkCreateSampler(device, &samplerCreateInfo, nullptr, &this->colourSampler) == VK_SUCCESS;
 }
 
 bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
@@ -492,19 +511,6 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
         vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.deferredPassDescriptor);
     }
 
-    // Combination Pass Descriptor
-    {
-        VkDescriptorSetAllocateInfo passDescriptorSetAllocateInfo = {};
-        passDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        passDescriptorSetAllocateInfo.pNext = nullptr;
-
-        passDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
-        passDescriptorSetAllocateInfo.descriptorSetCount = 1;
-        passDescriptorSetAllocateInfo.pSetLayouts = &this->combinationPassDescriptorSetLayout;
-
-        vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.combinationPassDescriptor);
-    }
-
     VkDescriptorBufferInfo cameraInfo;
     cameraInfo.buffer = frameData.cameraBuffer.buffer;
     cameraInfo.offset = 0;
@@ -520,14 +526,70 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
     objectInfo.offset = 0;
     objectInfo.range = sizeof(GpuObjectData) * maxObjectCount;
 
-    VkWriteDescriptorSet cameraWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo);
-    VkWriteDescriptorSet sceneWrite = VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo);
-
-    VkWriteDescriptorSet objectWrite = VKShortcuts::createWriteDescriptorSet(0, frameData.deferredPassDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo);
-
-    VkWriteDescriptorSet setWrites[] = {cameraWrite, sceneWrite, objectWrite};
+    VkWriteDescriptorSet setWrites[] {
+            VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo),
+            VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo),
+            VKShortcuts::createWriteDescriptorSet(0, frameData.deferredPassDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo)
+    };
 
     vkUpdateDescriptorSets(this->device, 3, setWrites, 0, nullptr);
+
+    // Combination Pass Descriptor
+    {
+        VkDescriptorSetAllocateInfo passDescriptorSetAllocateInfo = {};
+        passDescriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        passDescriptorSetAllocateInfo.pNext = nullptr;
+
+        passDescriptorSetAllocateInfo.descriptorPool = this->descriptorPool;
+        passDescriptorSetAllocateInfo.descriptorSetCount = 1;
+        passDescriptorSetAllocateInfo.pSetLayouts = &this->combinationPassDescriptorSetLayout;
+
+        vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.combinationPassDescriptor);
+
+        VkDescriptorImageInfo position = {
+                this->colourSampler,
+                deferredFrameData.position.imageView,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+        VkDescriptorImageInfo albedo = {
+                this->colourSampler,
+                deferredFrameData.albedo.imageView,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+        VkDescriptorImageInfo normal = {
+                this->colourSampler,
+                deferredFrameData.normal.imageView,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+        VkDescriptorImageInfo depth = {
+                this->colourSampler,
+                depthBuffer.imageView,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+
+        VkWriteDescriptorSet setWrites[] {
+            VKShortcuts::createWriteDescriptorSetImage(0, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &position),
+            VKShortcuts::createWriteDescriptorSetImage(1, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &albedo),
+            VKShortcuts::createWriteDescriptorSetImage(2, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal),
+            VKShortcuts::createWriteDescriptorSetImage(3, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depth)
+        };
+
+        vkUpdateDescriptorSets(this->device, 4, setWrites, 0, nullptr);
+    }
+}
+
+bool VulkanRenderer::deferredSyncObjects(EngineSettings& settings) {
+    VkSemaphoreCreateInfo semaphoreCreateInfo = {};
+    semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    semaphoreCreateInfo.pNext = nullptr;
+    semaphoreCreateInfo.flags = 0;
+
+    if (vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr, &deferredFrameData.deferredSemaphore) != VK_SUCCESS) {
+        Logger::error("Failed to create deferred semaphore");
+        return false;
+    }
+
+    return true;
 }
 
 bool VulkanRenderer::initTransferContext(EngineSettings& settings) {
@@ -944,46 +1006,16 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
 
     SwapchainData swapchain = swapchainData[swapchainIndex];
 
-    vkResetCommandBuffer(frame.deferredCommandBuffer, 0);
+    uint32_t swapchainUniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
 
-    VkCommandBufferBeginInfo commandBufferBeginInfo = {};
-    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    commandBufferBeginInfo.pNext = nullptr;
-    commandBufferBeginInfo.pInheritanceInfo = nullptr;
-
-    commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(frame.deferredCommandBuffer, &commandBufferBeginInfo);
-
-    VkClearValue clearValues[2];
-    float flash = (float) std::abs(std::sin(gameTime));
-    clearValues[0].color = {{0.f, 0.f, flash, 1.f}};
-
-    clearValues[1].depthStencil.depth = 1.f;
-    clearValues[1].depthStencil.stencil = 0;
-
-    VkRenderPassBeginInfo renderPassBeginInfo = {};
-    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassBeginInfo.pNext = nullptr;
-
-    renderPassBeginInfo.renderPass = this->combinationRenderpass;
-    renderPassBeginInfo.renderArea.offset.x = 0;
-    renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent = {1366, 768};
-    renderPassBeginInfo.framebuffer = swapchain.framebuffer;
-
-    renderPassBeginInfo.clearValueCount = 2;
-    renderPassBeginInfo.pClearValues = clearValues;
-
-    // Renderpass
+    // Setup global descriptor sets
     {
-        vkCmdBeginRenderPass(frame.deferredCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
         // Camera Buffer
         {
             glm::vec3 camPos = {0.f, 0.f, -10.f};
             GpuCameraData cameraData = {
                     glm::translate(glm::mat4(1.f), camPos) * glm::mat4_cast(scene.controlledActor->getRotation()),
-                    glm::perspective(glm::radians(90.f), 1366.f / 768.f, 0.1f, 200.f)
+                    glm::perspective(glm::radians(90.f), ((float) settings->windowWidth) / ((float) settings->windowHeight), 0.1f, 200.f)
             };
 
             void* data;
@@ -999,12 +1031,49 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
             sceneParams.ambientColor = {std::sin(framed), 0, std::cos(framed), 1};
             char* sceneData;
             vmaMapMemory(allocator, sceneParamsBuffer.allocation, (void**) &sceneData);
-            sceneData += padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
+            sceneData += swapchainUniformOffset;
             memcpy(sceneData, &sceneParams, sizeof(GPUSceneData));
             vmaUnmapMemory(allocator, sceneParamsBuffer.allocation);
         }
+    }
 
-        // Object Buffer
+    // Deferred Renderpass
+    {
+        vkResetCommandBuffer(frame.deferredCommandBuffer, 0);
+
+        VkCommandBufferBeginInfo commandBufferBeginInfo = {};
+        commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        commandBufferBeginInfo.pNext = nullptr;
+        commandBufferBeginInfo.pInheritanceInfo = nullptr;
+
+        commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(frame.deferredCommandBuffer, &commandBufferBeginInfo);
+
+        VkClearValue clearValues[4];
+        float flash = (float) std::abs(std::sin(gameTime));
+        clearValues[0].color = {{0.f, 0.f, 0.f, 1.f}};
+        clearValues[1].color = {{0.f, 0.f, flash, 1.f}};
+        clearValues[2].color = {{0.f, 0.f, 0.f, 1.f}};
+
+        clearValues[3].depthStencil.depth = 1.f;
+        clearValues[3].depthStencil.stencil = 0;
+
+        VkRenderPassBeginInfo renderPassBeginInfo = {};
+        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassBeginInfo.pNext = nullptr;
+
+        renderPassBeginInfo.renderPass = this->deferredRenderpass;
+        renderPassBeginInfo.renderArea.offset.x = 0;
+        renderPassBeginInfo.renderArea.offset.y = 0;
+        renderPassBeginInfo.renderArea.extent = {settings->windowWidth, settings->windowHeight};
+        renderPassBeginInfo.framebuffer = deferredFrameData.framebuffer;
+
+        renderPassBeginInfo.clearValueCount = 4;
+        renderPassBeginInfo.pClearValues = clearValues;
+
+        vkCmdBeginRenderPass(frame.deferredCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        // Deferred descriptor set
         {
             void* objectData;
             vmaMapMemory(this->allocator, frame.objectBuffer.allocation, &objectData);
@@ -1038,9 +1107,8 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
 
                 vkCmdBindPipeline(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
 
-                uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
                 vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
-                                        0, 1, &frame.globalDescriptor, 1, &uniformOffset);
+                                        0, 1, &frame.globalDescriptor, 1, &swapchainUniformOffset);
                 vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
                                         1, 1, &frame.deferredPassDescriptor, 0, nullptr);
                 vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
@@ -1088,27 +1156,94 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
         }
 
         vkCmdEndRenderPass(frame.deferredCommandBuffer);
+        vkEndCommandBuffer(frame.deferredCommandBuffer);
+
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.pNext = nullptr;
+
+        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        submitInfo.pWaitDstStageMask = &waitStage;
+
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = &frame.presentSemaphore;
+
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &deferredFrameData.deferredSemaphore;
+
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &frame.deferredCommandBuffer;
+
+        vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
     }
-    vkEndCommandBuffer(frame.deferredCommandBuffer);
 
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.pNext = nullptr;
+    // Combination Renderpass
+    {
+        vkResetCommandBuffer(frame.combinationCommandBuffer, 0);
 
-    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkCommandBufferBeginInfo commandBufferBeginInfo = {};
+        commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        commandBufferBeginInfo.pNext = nullptr;
+        commandBufferBeginInfo.pInheritanceInfo = nullptr;
 
-    submitInfo.pWaitDstStageMask = &waitStage;
+        commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(frame.combinationCommandBuffer, &commandBufferBeginInfo);
 
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &frame.presentSemaphore;
+        VkClearValue clearValues[1];
+        clearValues[0].color = {{0.f, 0.f, 0.f, 1.f}};
 
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &frame.renderSemaphore;
+        VkRenderPassBeginInfo renderPassBeginInfo = {};
+        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassBeginInfo.pNext = nullptr;
 
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &frame.deferredCommandBuffer;
+        renderPassBeginInfo.renderPass = this->combinationRenderpass;
+        renderPassBeginInfo.renderArea.offset.x = 0;
+        renderPassBeginInfo.renderArea.offset.y = 0;
+        renderPassBeginInfo.renderArea.extent = {settings->windowWidth, settings->windowHeight};
+        renderPassBeginInfo.framebuffer = swapchain.framebuffer;
 
-    vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, frame.renderFence);
+        renderPassBeginInfo.clearValueCount = 1;
+        renderPassBeginInfo.pClearValues = clearValues;
+
+        vkCmdBeginRenderPass(frame.combinationCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        // Bind pipeline and descriptors
+        {
+            VMaterial vMat = materialList.get(combinationMat.materialId);
+            vkCmdBindPipeline(frame.combinationCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipeline);
+
+            vkCmdBindDescriptorSets(frame.combinationCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                    0, 1, &frame.globalDescriptor, 1, &swapchainUniformOffset);
+            vkCmdBindDescriptorSets(frame.combinationCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                    1, 1, &frame.combinationPassDescriptor, 0, nullptr);
+
+        }
+
+        vkCmdDraw(frame.combinationCommandBuffer, 3, 1, 0, 0);
+
+        vkCmdEndRenderPass(frame.combinationCommandBuffer);
+        vkEndCommandBuffer(frame.combinationCommandBuffer);
+
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.pNext = nullptr;
+
+        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        submitInfo.pWaitDstStageMask = &waitStage;
+
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = &deferredFrameData.deferredSemaphore;
+
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &frame.renderSemaphore;
+
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &frame.combinationCommandBuffer;
+
+        vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, frame.renderFence);
+    }
 
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1326,6 +1461,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
     void* data;
     vmaMapMemory(this->allocator, stagingBuffer.allocation, &data);
     memcpy(data, texture.pixels.data(), bufferSize);
+    vmaFlushAllocation(allocator, stagingBuffer.allocation, 0, bufferSize);
     vmaUnmapMemory(this->allocator, stagingBuffer.allocation);
 
     VkFormat format = textureFormatToVkFormat(texture.format);
@@ -1381,7 +1517,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
             VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             nullptr,
             0,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_ACCESS_MEMORY_WRITE_BIT,
 
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -1410,7 +1546,27 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
 
         vkCmdCopyBufferToImage(transferCommandBuffer, stagingBuffer.buffer, vTexture.image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
-        VkImageMemoryBarrier readableBarrier {
+        VkImageMemoryBarrier readableBarrierTransfer {
+                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                nullptr,
+                VK_ACCESS_MEMORY_WRITE_BIT,
+                VK_ACCESS_SHADER_READ_BIT,
+
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                transferQueueIndex,
+                graphicsQueueIndex,
+                vTexture.image.image,
+                range
+        };
+
+        vkCmdPipelineBarrier(transferCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
+                             nullptr, 0, nullptr, 1, &readableBarrierTransfer);
+        vkEndCommandBuffer(transferCommandBuffer);
+
+        vkBeginCommandBuffer(graphicsCommandBuffer, &commandBufferBeginInfo);
+
+        VkImageMemoryBarrier readableBarrierGraphics {
                 VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                 nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1424,13 +1580,8 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
                 range
         };
 
-        vkCmdPipelineBarrier(transferCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
-                             nullptr, 0, nullptr, 1, &readableBarrier);
-        vkEndCommandBuffer(transferCommandBuffer);
-
-        vkBeginCommandBuffer(graphicsCommandBuffer, &commandBufferBeginInfo);
-        vkCmdPipelineBarrier(graphicsCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
-                             nullptr, 0, nullptr, 1, &readableBarrier);
+        vkCmdPipelineBarrier(graphicsCommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+                             nullptr, 0, nullptr, 1, &readableBarrierGraphics);
         vkEndCommandBuffer(graphicsCommandBuffer);
         return VK_SUCCESS;
     });
@@ -1469,7 +1620,20 @@ bool VulkanRenderer::createMaterial(Material& material) {
 
         pipelineLayoutCreateInfo.flags = 0;
 
-        VkDescriptorSetLayout setLayouts[] = {this->globalDescriptorSetLayout, this->deferredPassDescriptorSetLayout, materialLayout};
+        VkDescriptorSetLayout passLayout;
+        switch (material.shaderType) {
+
+            case ShaderType::OPAQUE:
+            case ShaderType::WIREFRAME:
+            case ShaderType::TRANSPARENT:
+                passLayout = this->deferredPassDescriptorSetLayout;
+                break;
+            case ShaderType::COMBINATION:
+                passLayout = this->combinationPassDescriptorSetLayout;
+                break;
+        }
+
+        VkDescriptorSetLayout setLayouts[] = {this->globalDescriptorSetLayout, passLayout, materialLayout};
 
         pipelineLayoutCreateInfo.setLayoutCount = 3;
         pipelineLayoutCreateInfo.pSetLayouts = setLayouts;
@@ -1489,16 +1653,43 @@ bool VulkanRenderer::createMaterial(Material& material) {
         }
     }
 
-    VertexDescription vertexDescription = VertexDescription::getVertexDescription();
-    PipelineBuilder builder = PipelineBuilder(this->device, this->combinationRenderpass, pipelineLayout)
-            .setVertexInputInfo(vertexDescription)
+    VkRenderPass renderpass;
+    switch (material.shaderType) {
+        case ShaderType::OPAQUE:
+        case ShaderType::WIREFRAME:
+            renderpass = this->deferredRenderpass;
+            break;
+        case ShaderType::COMBINATION:
+            renderpass = this->combinationRenderpass;
+            break;
+        case ShaderType::TRANSPARENT:
+            // TODO: Implement
+            renderpass = VK_NULL_HANDLE;
+            break;
+    }
+
+    PipelineBuilder builder = PipelineBuilder(this->device,
+                                              renderpass,
+                                              pipelineLayout)
             .setInputAssemblyInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
             .setViewport(0.f, 0.f, (float) this->settings->windowWidth, (float) this->settings->windowHeight)
             .setScissor(0, 0, this->settings->windowWidth, this->settings->windowHeight)
             .setRasterisationState(material.shaderType == ShaderType::WIREFRAME ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL)
             .setMultisampleStateDefault()
-            .setColourBlendAttachmentDefault()
             .setDepthStencilState(true, true, VK_COMPARE_OP_LESS, false);
+
+    if (material.shaderType == ShaderType::COMBINATION) {
+        builder
+                .setVertexInputInfoDefault()
+                .addColourBlendAttachmentDefaultNoBlend();
+    } else {
+        VertexDescription vertexDescription = VertexDescription::getVertexDescription();
+        builder
+                .setVertexInputInfo(vertexDescription)
+                .addColourBlendAttachmentDefaultNoBlend()
+                .addColourBlendAttachmentDefaultNoBlend()
+                .addColourBlendAttachmentDefaultNoBlend();
+    }
 
     std::vector<VkShaderModule> shaderModules;
     shaderModules.reserve(material.materialStages.size());
@@ -1532,16 +1723,20 @@ bool VulkanRenderer::createMaterial(Material& material) {
         vkAllocateDescriptorSets(this->device, &materialDescriptorSetAllocInfo, &materialSet);
 
         std::vector<VkWriteDescriptorSet> writeDescriptorSets(material.textures.size());
+
+        VkDescriptorImageInfo imageInfos[material.textures.size()];
         for (int i = 0; i < material.textures.size(); ++i) {
             Texture* texture = material.textures[i];
             VTexture vTexture = imageList.get(texture->textureId);
-            VkDescriptorImageInfo imageInfo {
+
+            // Workaround so memory doesn't get freed outside the loop
+            imageInfos[i] = {
                 vTexture.sampler,
                 vTexture.imageView,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             };
 
-            writeDescriptorSets[i] = VKShortcuts::createWriteDescriptorSetImage(i, materialSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imageInfo);
+            writeDescriptorSets[i] = VKShortcuts::createWriteDescriptorSetImage(i, materialSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageInfos + i);
         }
 
         vkUpdateDescriptorSets(this->device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);

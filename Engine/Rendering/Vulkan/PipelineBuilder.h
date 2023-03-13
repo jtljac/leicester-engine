@@ -18,12 +18,16 @@
  */
 class PipelineBuilder {
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+
+    VertexDescription vertexDescription;        // This should be copied to ensure it can't be freed before it's used
     VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
+
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {};
     VkViewport viewport;
     VkRect2D scissor;
     VkPipelineRasterizationStateCreateInfo rasterizationState = {};
-    VkPipelineColorBlendAttachmentState colourBlendAttachment = {};
+    std::vector<VkPipelineColorBlendAttachmentState> colourBlendAttachments;
+    VkPipelineColorBlendStateCreateInfo colorBlendState = {};
     VkPipelineMultisampleStateCreateInfo multisampleState = {};
     VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
 
@@ -65,10 +69,10 @@ public:
 
     /**
      * Sets the vertexInputInfo using info from a VertexDescription
-     * @param vertexDescription the vertexDescription to pull the vertex input info from
+     * @param vertexDescription the vertexDescription to pull the vertex input info from, this will be copied so it can be safely discarded
      * @return the PipelineBuilder
      */
-    PipelineBuilder& setVertexInputInfo(VertexDescription& vertexDescription);
+    PipelineBuilder& setVertexInputInfo(VertexDescription vertexDescription);
 
     /**
      * Sets vertexInputInfo
@@ -168,17 +172,23 @@ public:
 
 
     /**
-     * Set the colourBlendAttachment to no blending
+     * Add a default colourBlendAttachment that has no blending
      * @return the PipelineBuilder
      */
-    PipelineBuilder& setColourBlendAttachmentDefault();
+    PipelineBuilder& addColourBlendAttachmentDefaultNoBlend();
 
     /**
-     * Set the colorBlendAttachment
+     * Add a colorBlendAttachment
      * @param colourBlendAttachmentState A ready made VkPipelineColorBlendAttachmentState
      * @return the PipelineBuilder
      */
-    PipelineBuilder& setColourBlendAttachment(VkPipelineColorBlendAttachmentState& colourBlendAttachmentState);
+    PipelineBuilder& addColourBlendAttachment(VkPipelineColorBlendAttachmentState& colourBlendAttachmentState);
+
+    /**
+     * Remove all Colour Blend Attachments in the builder
+     * @return the PipelineBuilder
+     */
+    PipelineBuilder& clearColourBlendAttachments();
 
     /**
      * Set the depthStencilState to the default, with depth testing and writing disabled

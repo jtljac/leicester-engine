@@ -18,6 +18,7 @@ enum class ShaderStage : uint8_t {
 enum class ShaderType : uint8_t {
     OPAQUE,
     WIREFRAME,
+    COMBINATION,
     TRANSPARENT
 };
 
