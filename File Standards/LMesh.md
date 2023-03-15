@@ -50,9 +50,9 @@ The header contains:
 ## The vertex array:
 The vertex array is a continuous stream of Vertices exactly the length `vertexCount` defined in the header
 
-Each vertex is comprised of 3 vecs which defined the position, normal, and colour of the vertex, and a vec2d that represents the UV coordinates.
-Vecs are defined as three 32 bit floats, each representing a dimensional coordinate.
+Each vertex is composed of 3 vecs which defined the position, normal, and colour of the vertex, and a vec2d that represents the UV coordinates.
+Vecs are defined as three 32-bit floats, each representing a dimensional coordinate.
 
 ## The index array:
 The index array is a continuous stream of indices exactly the length `indexCount` defined in the header.
-Each index is a 32 bit unsigned integer that corresponds to an index of the `vertexArray`.
+Each index is a 32-bit unsigned integer that corresponds to an index of the `vertexArray`.

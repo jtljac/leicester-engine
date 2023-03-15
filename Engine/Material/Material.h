@@ -18,13 +18,13 @@ enum class ShaderStage : uint8_t {
 enum class ShaderType : uint8_t {
     OPAQUE,
     WIREFRAME,
-    COMBINATION,
-    TRANSPARENT
+    TRANSPARENT,
+    COMBINATION
 };
 
 struct MaterialStage {
-    std::string shaderPathSpirv;
     ShaderStage shaderStage;
+    std::string shaderPathSpirv;
 };
 
 struct Material {
