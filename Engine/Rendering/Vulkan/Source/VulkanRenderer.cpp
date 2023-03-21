@@ -536,14 +536,14 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
     objectInfo.offset = 0;
     objectInfo.range = sizeof(GpuObjectData) * maxObjectCount;
 
-    VkWriteDescriptorSet setWrites[] {
+    std::array<VkWriteDescriptorSet, 4> setWrites {{
             VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraMatInfo),
             VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraMetaInfo),
             VKShortcuts::createWriteDescriptorSet(2, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo),
             VKShortcuts::createWriteDescriptorSet(0, frameData.deferredPassDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo)
-    };
+    }};
 
-    vkUpdateDescriptorSets(this->device, 3, setWrites, 0, nullptr);
+    vkUpdateDescriptorSets(this->device, setWrites.size(), setWrites.data(), 0, nullptr);
 
     // Combination Pass Descriptor
     {
@@ -578,14 +578,14 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };
 
-        VkWriteDescriptorSet setWrites[] {
+        std::array<VkWriteDescriptorSet, 4> setWrites {
             VKShortcuts::createWriteDescriptorSetImage(0, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &position),
             VKShortcuts::createWriteDescriptorSetImage(1, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &albedo),
             VKShortcuts::createWriteDescriptorSetImage(2, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal),
             VKShortcuts::createWriteDescriptorSetImage(3, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depth)
         };
 
-        vkUpdateDescriptorSets(this->device, 4, setWrites, 0, nullptr);
+        vkUpdateDescriptorSets(this->device, setWrites.size(), setWrites.data(), 0, nullptr);
     }
 }
 
@@ -1024,16 +1024,18 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
         // Camera Buffer
         {
             glm::vec3 camPos = {0.f, 0.f, -10.f};
+            const glm::mat4& viewMat = glm::translate(glm::mat4(1.f), camPos) *
+                                       glm::mat4_cast(scene.controlledActor->getRotation());
             GpuCameraData cameraData = {
                     {
-                            glm::translate(glm::mat4(1.f), camPos) *
-                            glm::mat4_cast(scene.controlledActor->getRotation()),
+                            viewMat,
                             glm::perspective(glm::radians(90.f),
                                              ((float) settings->windowWidth) / ((float) settings->windowHeight), 0.1f,
                                              200.f)
                     },
                     {
-                        camPos
+                            // TODO: The viewMat can be handled better
+                            (glm::vec3) (viewMat * glm::vec4(1))
                     }
             };
 

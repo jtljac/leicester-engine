@@ -8,7 +8,7 @@
 
 Material::Material(std::string vertPath, std::string fragPath, ShaderType shaderType,
                    const std::vector<Texture*>& textures) :
-                   materialStages({{vertPath, ShaderStage::VERT}, {fragPath, ShaderStage::FRAG}}),
+                   materialStages({{ShaderStage::VERT, vertPath}, {ShaderStage::FRAG, fragPath}}),
                    shaderType(shaderType),
                    textures(textures)
                    {}
