@@ -6,9 +6,18 @@
 
 #include <glm/glm.hpp>
 
-struct GpuCameraData {
+struct GpuCameraMat {
     glm::mat4 view;
     glm::mat4 proj;
+};
+
+struct alignas(4) GpuCameraMeta {
+    glm::vec3 cameraPos;
+};
+
+struct GpuCameraData {
+    GpuCameraMat matrices;
+    GpuCameraMeta meta;
 };
 
 struct GpuObjectData {

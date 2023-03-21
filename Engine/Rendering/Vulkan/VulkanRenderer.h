@@ -100,7 +100,7 @@ class VulkanRenderer : public Renderer {
     IDTrackedResource<uint64_t, VTexture> imageList;      // Stores Allocated Images against an ID
     IDTrackedResource<uint64_t, VMaterial> materialList;        // Stores Materials against an ID
     Material collisionMat = Material("/Colliders/Collider.vert.spv", "/Colliders/Collider.frag.spv", ShaderType::WIREFRAME);
-    Material combinationMat = Material("/Deferred-Pipeline/combination.vert.spv", "/Deferred-Pipeline/combination.frag.spv", ShaderType::COMBINATION);
+    Material combinationMat = Material("/Materials/Deferred-Pipeline/combination.vert.spv", "/Materials/Deferred-Pipeline/combination.frag.spv", ShaderType::COMBINATION);
 
     // Global Samplers
     VkSampler colourSampler = VK_NULL_HANDLE;

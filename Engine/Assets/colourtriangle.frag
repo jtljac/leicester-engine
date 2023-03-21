@@ -9,7 +9,11 @@ layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outAlbedo;
 layout (location = 2) out vec4 outNormal;
 
-layout(set=0, binding=1) uniform SceneData {
+layout(set=0, binding=1) uniform CameraMeta {
+    vec3 cameraPos;
+} cameraMeta;
+
+layout(set=0, binding=2) uniform SceneData {
     vec4 fogColor; // w is for exponent
     vec4 fogDistances; //x for min, y for max, zw unused.
     vec4 ambientColor;

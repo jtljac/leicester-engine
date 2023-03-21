@@ -316,11 +316,16 @@ bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
                                          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                          VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings{{
+        std::array<VkDescriptorSetLayoutBinding, 3> bindings{{
             VKShortcuts::createDescriptorSetLayoutBinding(0,
                                                           VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                                                           VK_SHADER_STAGE_VERTEX_BIT),
+
             VKShortcuts::createDescriptorSetLayoutBinding(1,
+                                                          VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                                          VK_SHADER_STAGE_VERTEX_BIT |
+                                                          VK_SHADER_STAGE_FRAGMENT_BIT),
+            VKShortcuts::createDescriptorSetLayoutBinding(2,
                                                           VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
                                                           VK_SHADER_STAGE_VERTEX_BIT |
                                                           VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -511,10 +516,15 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
         vkAllocateDescriptorSets(this->device, &passDescriptorSetAllocateInfo, &frameData.deferredPassDescriptor);
     }
 
-    VkDescriptorBufferInfo cameraInfo;
-    cameraInfo.buffer = frameData.cameraBuffer.buffer;
-    cameraInfo.offset = 0;
-    cameraInfo.range = sizeof(GpuCameraData);
+    VkDescriptorBufferInfo cameraMatInfo;
+    cameraMatInfo.buffer = frameData.cameraBuffer.buffer;
+    cameraMatInfo.offset = 0;
+    cameraMatInfo.range = sizeof(GpuCameraMat);
+
+    VkDescriptorBufferInfo cameraMetaInfo;
+    cameraMetaInfo.buffer = frameData.cameraBuffer.buffer;
+    cameraMetaInfo.offset = sizeof(GpuCameraMat);
+    cameraMetaInfo.range = sizeof(GpuCameraMeta);
 
     VkDescriptorBufferInfo sceneInfo;
     sceneInfo.buffer = sceneParamsBuffer.buffer;
@@ -527,8 +537,9 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
     objectInfo.range = sizeof(GpuObjectData) * maxObjectCount;
 
     VkWriteDescriptorSet setWrites[] {
-            VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraInfo),
-            VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo),
+            VKShortcuts::createWriteDescriptorSet(0, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraMatInfo),
+            VKShortcuts::createWriteDescriptorSet(1, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &cameraMetaInfo),
+            VKShortcuts::createWriteDescriptorSet(2, frameData.globalDescriptor, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, &sceneInfo),
             VKShortcuts::createWriteDescriptorSet(0, frameData.deferredPassDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &objectInfo)
     };
 
@@ -1014,8 +1025,16 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
         {
             glm::vec3 camPos = {0.f, 0.f, -10.f};
             GpuCameraData cameraData = {
-                    glm::translate(glm::mat4(1.f), camPos) * glm::mat4_cast(scene.controlledActor->getRotation()),
-                    glm::perspective(glm::radians(90.f), ((float) settings->windowWidth) / ((float) settings->windowHeight), 0.1f, 200.f)
+                    {
+                            glm::translate(glm::mat4(1.f), camPos) *
+                            glm::mat4_cast(scene.controlledActor->getRotation()),
+                            glm::perspective(glm::radians(90.f),
+                                             ((float) settings->windowWidth) / ((float) settings->windowHeight), 0.1f,
+                                             200.f)
+                    },
+                    {
+                        camPos
+                    }
             };
 
             void* data;

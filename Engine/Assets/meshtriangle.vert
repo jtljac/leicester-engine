@@ -19,6 +19,10 @@ layout (set = 0, binding = 0) uniform CameraBuffer {
     mat4 proj;
 } cameraData;
 
+layout (set = 0, binding = 1) uniform CameraMeta {
+    vec3 cameraPos;
+} cameraMeta;
+
 struct ObjectData {
     mat4 model;
 };
