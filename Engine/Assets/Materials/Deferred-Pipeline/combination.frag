@@ -43,7 +43,7 @@ PointLight testLights[4] = {
  * @return the percentage of light reflected by the surface
  */
 vec3 fresnel(float cosTheta, vec3 F0) {
-    return F0 + (1.f - F0) * pow(clamp(1.f, costheta, 0.f, 1.f), 5.f);
+    return F0 + (1.f - F0) * pow(clamp(1.f - cosTheta, 0.f, 1.f), 5.f);
 }
 
 /**
@@ -87,8 +87,8 @@ float geometrySchlick(float NdotV, float roughness) {
  * @param roughness The roughness of the surface
  */
 float geometrySmith(vec3 normal, vec3 cameraDirection, vec3 lightDirection, float roughness) {
-    float NdotV = max(dot(N, V, 0.f));
-    float NdotL = max(dot(N, L, 0.f));
+    float NdotV = max(dot(normal, cameraDirection), 0.f);
+    float NdotL = max(dot(normal, lightDirection), 0.f);
 
     float ggx2 = geometrySchlick(NdotV, roughness);
     float ggx1 = geometrySchlick(NdotL, roughness);
@@ -108,7 +108,7 @@ void main() {
 
 
     vec3 N = normalize(normal.xyz);
-    vec3 cameraDirection = normalize(cameraMeta.cameraPos - worldPos);
+    vec3 cameraDirection = normalize(cameraMeta.cameraPos - worldPos.xyz);
 
     // Calculate F0 for material
     vec3 F0 = mix(vec3(0.04), albedo.xyz, metallic);
@@ -116,7 +116,7 @@ void main() {
     // Direct Lighting
     vec3 Lo = vec3(0.f);
     for(int i = 0; i < 4; ++i) {
-        vec3 lightToPixel = testLights[i].lightPosition - worldPos;
+        vec3 lightToPixel = testLights[i].lightPosition - worldPos.xyz;
 
         vec3 lightDirection = normalize(lightToPixel);
         vec3 halfwayPoint = normalize(cameraDirection + lightDirection);

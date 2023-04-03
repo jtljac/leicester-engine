@@ -7,7 +7,8 @@ layout (location = 3) in vec2 texCoord;
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outAlbedo;
-layout (location = 2) out vec4 outNormal;
+layout (location = 2) out vec4 outMetallicRoughnessAo;
+layout (location = 3) out vec4 outNormal;
 
 layout(set=0, binding=1) uniform CameraMeta {
     vec3 cameraPos;
@@ -28,5 +29,6 @@ void main() {
 
     outPosition = vec4(inPosition, 1.0f);
     outAlbedo = vec4(colour, 1.0f);
+    outMetallicRoughnessAo = vec4(0.f, 1.f, 1.f, 1.0f);
     outNormal = vec4(inNormal, 1.0f);
 }

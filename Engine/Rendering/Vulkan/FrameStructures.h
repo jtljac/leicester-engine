@@ -49,6 +49,6 @@ struct GBufferData {
 
 struct DeferredFrameData {
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
-    GBufferData position{}, normal{}, albedo{};
+    GBufferData position{}, albedo{}, metallicRoughnessAO{}, normal{};
     VkSemaphore deferredSemaphore = VK_NULL_HANDLE;
 };

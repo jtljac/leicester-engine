@@ -234,6 +234,7 @@ bool VulkanRenderer::initGBuffers(EngineSettings& settings) {
     GBufferData* iter[] = {
         &this->deferredFrameData.position,
         &this->deferredFrameData.albedo,
+        &this->deferredFrameData.metallicRoughnessAO,
         &this->deferredFrameData.normal
     };
 
@@ -369,7 +370,7 @@ bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
 
     // Combination Pass Descriptor
     {
-        std::array<VkDescriptorSetLayoutBinding, 4> bindings{{
+        std::array<VkDescriptorSetLayoutBinding, 5> bindings{{
                 VKShortcuts::createDescriptorSetLayoutBinding(0,
                                                             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                                             VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -380,6 +381,9 @@ bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
                                                               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                                               VK_SHADER_STAGE_FRAGMENT_BIT),
                 VKShortcuts::createDescriptorSetLayoutBinding(3,
+                                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                                              VK_SHADER_STAGE_FRAGMENT_BIT),
+                VKShortcuts::createDescriptorSetLayoutBinding(4,
                                                               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                                               VK_SHADER_STAGE_FRAGMENT_BIT),
         }};
@@ -567,6 +571,11 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
                 deferredFrameData.albedo.imageView,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };
+        VkDescriptorImageInfo metallicRoughnessAo = {
+                this->colourSampler,
+                deferredFrameData.metallicRoughnessAO.imageView,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
         VkDescriptorImageInfo normal = {
                 this->colourSampler,
                 deferredFrameData.normal.imageView,
@@ -578,9 +587,10 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };
 
-        std::array<VkWriteDescriptorSet, 4> setWrites {
+        std::array<VkWriteDescriptorSet, 5> setWrites {
             VKShortcuts::createWriteDescriptorSetImage(0, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &position),
             VKShortcuts::createWriteDescriptorSetImage(1, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &albedo),
+            VKShortcuts::createWriteDescriptorSetImage(1, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &metallicRoughnessAo),
             VKShortcuts::createWriteDescriptorSetImage(2, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal),
             VKShortcuts::createWriteDescriptorSetImage(3, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depth)
         };
@@ -676,7 +686,7 @@ bool VulkanRenderer::initTransferContext(EngineSettings& settings) {
 }
 
 bool VulkanRenderer::initDeferredRenderpass(EngineSettings& settings) {
-    std::array<VkAttachmentDescription, 4> attachments{{
+    std::array<VkAttachmentDescription, 5> attachments{{
         {
                 0,
                 this->deferredFrameData.position.format,
@@ -691,6 +701,17 @@ bool VulkanRenderer::initDeferredRenderpass(EngineSettings& settings) {
         {
                 0,
                 this->deferredFrameData.albedo.format,
+                VK_SAMPLE_COUNT_1_BIT,
+                VK_ATTACHMENT_LOAD_OP_CLEAR,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        },
+        {
+                0,
+                this->deferredFrameData.metallicRoughnessAO.format,
                 VK_SAMPLE_COUNT_1_BIT,
                 VK_ATTACHMENT_LOAD_OP_CLEAR,
                 VK_ATTACHMENT_STORE_OP_STORE,
@@ -724,12 +745,13 @@ bool VulkanRenderer::initDeferredRenderpass(EngineSettings& settings) {
         }
     }};
 
-    std::array<VkAttachmentReference, 3> attachmentReferences = {{
+    std::array<VkAttachmentReference, 4> attachmentReferences = {{
             {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
             {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
             {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+            {3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
     }};
-    VkAttachmentReference depthAttachmentReference{3, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference depthAttachmentReference{4, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 
     std::array<VkSubpassDependency, 4> subpassDependencies = {{
 
@@ -810,9 +832,10 @@ bool VulkanRenderer::initDeferredFramebuffers(EngineSettings& settings) {
 
     framebufferCreateInfo.renderPass = this->deferredRenderpass;
 
-    std::array<VkImageView, 4> attachments{{
+    std::array<VkImageView, 5> attachments{{
         this->deferredFrameData.position.imageView,
         this->deferredFrameData.albedo.imageView,
+        this->deferredFrameData.metallicRoughnessAO.imageView,
         this->deferredFrameData.normal.imageView,
         this->depthBuffer.imageView
     }};
@@ -980,6 +1003,7 @@ void VulkanRenderer::cleanup() {
     vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(this->device, this->globalDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(this->device, this->deferredPassDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(this->device, this->combinationPassDescriptorSetLayout, nullptr);
 
     vmaDestroyAllocator(this->allocator);
 
@@ -1070,14 +1094,15 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
         commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vkBeginCommandBuffer(frame.deferredCommandBuffer, &commandBufferBeginInfo);
 
-        VkClearValue clearValues[4];
+        VkClearValue clearValues[5];
         float flash = (float) std::abs(std::sin(gameTime));
         clearValues[0].color = {{0.f, 0.f, 0.f, 1.f}};
         clearValues[1].color = {{0.f, 0.f, flash, 1.f}};
         clearValues[2].color = {{0.f, 0.f, 0.f, 1.f}};
+        clearValues[3].color = {{0.f, 0.f, 0.f, 1.f}};
 
-        clearValues[3].depthStencil.depth = 1.f;
-        clearValues[3].depthStencil.stencil = 0;
+        clearValues[4].depthStencil.depth = 1.f;
+        clearValues[4].depthStencil.stencil = 0;
 
         VkRenderPassBeginInfo renderPassBeginInfo = {};
         renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1089,7 +1114,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
         renderPassBeginInfo.renderArea.extent = {settings->windowWidth, settings->windowHeight};
         renderPassBeginInfo.framebuffer = deferredFrameData.framebuffer;
 
-        renderPassBeginInfo.clearValueCount = 4;
+        renderPassBeginInfo.clearValueCount = 5;
         renderPassBeginInfo.pClearValues = clearValues;
 
         vkCmdBeginRenderPass(frame.deferredCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
