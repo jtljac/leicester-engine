@@ -590,9 +590,9 @@ VulkanRenderer::initFrameDataDescriptorSets(EngineSettings& settings, FrameData&
         std::array<VkWriteDescriptorSet, 5> setWrites {
             VKShortcuts::createWriteDescriptorSetImage(0, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &position),
             VKShortcuts::createWriteDescriptorSetImage(1, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &albedo),
-            VKShortcuts::createWriteDescriptorSetImage(1, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &metallicRoughnessAo),
-            VKShortcuts::createWriteDescriptorSetImage(2, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal),
-            VKShortcuts::createWriteDescriptorSetImage(3, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depth)
+            VKShortcuts::createWriteDescriptorSetImage(2, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &metallicRoughnessAo),
+            VKShortcuts::createWriteDescriptorSetImage(3, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal),
+            VKShortcuts::createWriteDescriptorSetImage(4, frameData.combinationPassDescriptor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depth)
         };
 
         vkUpdateDescriptorSets(this->device, setWrites.size(), setWrites.data(), 0, nullptr);
@@ -1596,7 +1596,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
                 VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                 nullptr,
                 VK_ACCESS_MEMORY_WRITE_BIT,
-                VK_ACCESS_SHADER_READ_BIT,
+                0,
 
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -1606,7 +1606,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
                 range
         };
 
-        vkCmdPipelineBarrier(transferCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
+        vkCmdPipelineBarrier(transferCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                              nullptr, 0, nullptr, 1, &readableBarrierTransfer);
         vkEndCommandBuffer(transferCommandBuffer);
 
@@ -1615,7 +1615,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
         VkImageMemoryBarrier readableBarrierGraphics {
                 VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                 nullptr,
-                VK_ACCESS_TRANSFER_WRITE_BIT,
+                0,
                 VK_ACCESS_SHADER_READ_BIT,
 
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -1626,7 +1626,7 @@ void VulkanRenderer::uploadTexture(Texture& texture) {
                 range
         };
 
-        vkCmdPipelineBarrier(graphicsCommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+        vkCmdPipelineBarrier(graphicsCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
                              nullptr, 0, nullptr, 1, &readableBarrierGraphics);
         vkEndCommandBuffer(graphicsCommandBuffer);
         return VK_SUCCESS;
@@ -1734,6 +1734,7 @@ bool VulkanRenderer::createMaterial(Material& material) {
                 .setVertexInputInfo(vertexDescription)
                 .addColourBlendAttachmentDefaultNoBlend()
                 .addColourBlendAttachmentDefaultNoBlend()
+                .addColourBlendAttachmentDefaultNoBlend()
                 .addColourBlendAttachmentDefaultNoBlend();
     }
 
@@ -1808,7 +1809,7 @@ void VulkanRenderer::setupScene(Scene& scene) {
             registerMesh(actor->actorMesh->mesh);
 
             // Upload Material
-            createMaterial(*actor->actorMesh->material);
+            registerMaterial(actor->actorMesh->material);
         }
         if (actor->hasCollision()) {
             // Upload collision mesh

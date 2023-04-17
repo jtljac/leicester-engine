@@ -11,9 +11,11 @@
 #include "Collision/AABBCollider.h"
 #include "Collision/MeshCollider.h"
 
-void addActorsToScene(Scene* scene) {
-    Mesh* mesh = new Mesh();
-    mesh->loadMeshFromFile(FileUtils::getAssetsPath() + "/Monkey.lmesh");
+Scene *pbrScene();
+
+Scene* collisionScene() {
+    Scene* scene = new Scene();
+    Mesh* mesh = Mesh::createNewMeshFromFile(FileUtils::getAssetsPath() + "/Monkey.lmesh");
 
     Texture* texture = Texture::createNewTextureFromFile(FileUtils::getAssetsPath() + "/wall.ltex");
     std::vector<Texture*> texArray;
@@ -58,6 +60,43 @@ void addActorsToScene(Scene* scene) {
                                         new AABBCollider(CollisionMode::BLOCK, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
     scene->addActorToScene(monkey);
     scene->setControlledActor(monkey);
+
+    return scene;
+}
+
+Scene *pbrScene() {
+    Scene* scene = new Scene();
+
+    Mesh* mesh = Mesh::createNewMeshFromFile(FileUtils::getAssetsPath() + "/Shapes/Sphere.lmesh");
+    std::vector<Texture*> texArray;
+    texArray.push_back(Texture::createNewTextureFromFile(FileUtils::getAssetsPath() + "/PBR Example/rustediron2_basecolor.ltex"));
+    texArray.push_back(Texture::createNewTextureFromFile(FileUtils::getAssetsPath() + "/PBR Example/rustediron2_metallic.ltex"));
+    texArray.push_back(Texture::createNewTextureFromFile(FileUtils::getAssetsPath() + "/PBR Example/rustediron2_normal.ltex"));
+    texArray.push_back(Texture::createNewTextureFromFile(FileUtils::getAssetsPath() + "/PBR Example/rustediron2_roughness.ltex"));
+    Material* mat = new Material("/meshtriangle.vert.spv", "/PBR Example/pbr_sphere.frag.spv", ShaderType::OPAQUE, texArray);
+    StaticMesh* staticMesh = new StaticMesh(mesh, mat);
+
+    Actor* sphere1 = new Actor(staticMesh, nullptr);
+    sphere1->setPosition(glm::vec3(-2, 2, 0));
+    scene->addActorToScene(sphere1);
+
+    Actor* sphere2 = new Actor(staticMesh, nullptr);
+    sphere2->setPosition(glm::vec3(2, 2, 0));
+    scene->addActorToScene(sphere2);
+
+    Actor* sphere3 = new Actor(staticMesh, nullptr);
+    sphere3->setPosition(glm::vec3(-2, -2, 0));
+    scene->addActorToScene(sphere3);
+
+    Actor* sphere4 = new Actor(staticMesh, nullptr);
+    sphere4->setPosition(glm::vec3(2, -2, 0));
+    scene->addActorToScene(sphere4);
+
+    Actor* controlled = new ControlledActor(nullptr, nullptr);
+    scene->addActorToScene(controlled);
+    scene->setControlledActor(controlled);
+
+    return scene;
 }
 
 int main() {
@@ -66,7 +105,7 @@ int main() {
     engine.setCollisionEngine(new GJKCollisionEngine());
     engine.initialise();
 
-    engine.setScene(new Scene());
-    addActorsToScene(engine.currentScene);
+//    engine.setScene(collisionScene());
+    engine.setScene(pbrScene());
     engine.startLoop();
 }

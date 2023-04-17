@@ -55,7 +55,7 @@ void ImgProcessor::writeTexture(const std::string& dest, uint32_t width, uint32_
     // Write Body
     {
         // format+1, for channels of size 8, should map 1 to 1 to the size of the pixel in bytes
-        destFile.write(reinterpret_cast<const char*>(pixels), width * height * (int) format + 1);
+        destFile.write(reinterpret_cast<const char*>(pixels), width * height * ((int) format + 1));
     }
     destFile.close();
 }

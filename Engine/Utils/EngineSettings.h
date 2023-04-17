@@ -9,8 +9,8 @@
 
 struct EngineSettings {
     // Window
-    const unsigned int windowWidth = 1366;
-    const unsigned int windowHeight = 768;
+    const unsigned int windowWidth = 1920;
+    const unsigned int windowHeight = 1080;
 
     const unsigned int bufferCount = 2;
 

@@ -29,10 +29,10 @@ layout(set=1, binding=3) uniform sampler2D normalTex;
 
 // Hardcode lights for now
 PointLight testLights[4] = {
-    PointLight(vec4(1, 1, 1, 0), vec3(2, 2, 2)),
-    PointLight(vec4(1, 1, 1, 0), vec3(-2, 2, 2)),
-    PointLight(vec4(1, 1, 1, 0), vec3(2, -2, 2)),
-    PointLight(vec4(1, 1, 1, 0), vec3(-2, -2, 2)),
+    PointLight(vec4(1, 1, 1, 150), vec3(3, 3, 4)),
+    PointLight(vec4(1, 1, 1, 150), vec3(-3, 3, 4)),
+    PointLight(vec4(1, 1, 1, 150), vec3(3, -3, 4)),
+    PointLight(vec4(1, 1, 1, 150), vec3(-3, -3, 4)),
 };
 
 /**
@@ -123,7 +123,7 @@ void main() {
 
         float lightDistance = length(lightToPixel);
         float attenuation = 1.f / (lightDistance * lightDistance);
-        vec3 radiance = testLights[i].lightColour.xyz * attenuation;
+        vec3 radiance = testLights[i].lightColour.xyz * testLights[i].lightColour.w * attenuation;
 
         vec3 F = fresnel(max(dot(halfwayPoint, cameraDirection), 0.f), F0);
         float NDF = normalDistribution(N, halfwayPoint, roughness);
@@ -140,6 +140,12 @@ void main() {
         Lo += (KD * albedo.xyz / PI + specular) * radiance * NdotL;
     }
 
-    vec3 ambient = sceneData.ambientColor.xyz * albedo.xyz * AO;
-    outFragColor = vec4(ambient + Lo, 1.0f);
+    vec3 ambient = /*sceneData.ambientColor.xyz * */ vec3(0.03) * albedo.xyz * AO;
+
+    vec3 color = Lo;
+
+    // HDR Tonemapping
+//    color = color / (color + vec3(1.0));
+
+    outFragColor = vec4(color, 1.0f);
 }
