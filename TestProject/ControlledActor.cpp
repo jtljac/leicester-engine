@@ -19,16 +19,12 @@ void ControlledActor::handleInput(int key, int scancode, int action, int mods) {
 }
 
 void ControlledActor::handleMouse(double mouseX, double mouseY) {
-    Logger::info("x:" + std::to_string(mouseX) + ", y:" + std::to_string(mouseY));
     float deltaX = mouseX - this->lastMouseX;
     float deltaY = this->lastMouseY - mouseY;
     lastMouseX = mouseX;
     lastMouseY = mouseY;
 
-    glm::vec3 eulerAngles = glm::eulerAngles(rotation);
-    eulerAngles.x += deltaY * .01; // .y for yaw, .z for roll
-    eulerAngles.y += deltaX * .01;
-    rotation = glm::quat(eulerAngles);
+    rotation += glm::vec3(deltaY * .01, deltaX * .01, 0);
 }
 
 

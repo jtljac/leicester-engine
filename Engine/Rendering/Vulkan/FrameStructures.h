@@ -42,13 +42,16 @@ struct SwapchainData {
 };
 
 struct GBufferData {
-    VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
     AllocatedImage image{};
     VkImageView imageView = VK_NULL_HANDLE;
 };
 
 struct DeferredFrameData {
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
-    GBufferData position{}, albedo{}, metallicRoughnessAO{}, normal{};
+    GBufferData position{VK_FORMAT_R16G16B16A16_SFLOAT},
+                albedo{VK_FORMAT_R8G8B8A8_UNORM},
+                metallicRoughnessAO{VK_FORMAT_R8G8B8A8_UNORM},
+                normal{VK_FORMAT_R16G16B16A16_SFLOAT};
     VkSemaphore deferredSemaphore = VK_NULL_HANDLE;
 };

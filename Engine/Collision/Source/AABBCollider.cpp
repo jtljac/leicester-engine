@@ -34,5 +34,5 @@ glm::mat4 AABBCollider::getRenderMeshTransform() {
     glm::vec3 scale = glm::abs(this->boundingBox.min) + glm::abs(this->boundingBox.max);
     glm::vec3 position = (this->boundingBox.min + this->boundingBox.max);
     position /= 2;
-    return glm::scale(glm::translate(glm::mat4(1.f), position), scale);
+    return glm::translate(glm::mat4(1.f), getPosition() + position) * glm::scale(glm::mat4(1.f), scale);
 }

@@ -7,8 +7,9 @@
 
 #include "Mesh.h"
 #include "Material/Material.h"
+#include <Engine/LObject.h>
 
-struct StaticMesh {
+struct StaticMesh : public LObject {
     Mesh* mesh;
     Material* material;
 

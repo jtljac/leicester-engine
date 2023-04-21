@@ -28,11 +28,11 @@ layout(set=1, binding=2) uniform sampler2D metallicRoughtnessAOTex;
 layout(set=1, binding=3) uniform sampler2D normalTex;
 
 // Hardcode lights for now
-PointLight testLights[4] = {
-    PointLight(vec4(1, 1, 1, 150), vec3(3, 3, 4)),
-    PointLight(vec4(1, 1, 1, 150), vec3(-3, 3, 4)),
-    PointLight(vec4(1, 1, 1, 150), vec3(3, -3, 4)),
-    PointLight(vec4(1, 1, 1, 150), vec3(-3, -3, 4)),
+PointLight testLights[1] = {
+    PointLight(vec4(1, 1, 1, 50), vec3(0, 4, 0))
+//    PointLight(vec4(1, 1, 1, 150), vec3(-3, 3, 4)),
+//    PointLight(vec4(1, 1, 1, 150), vec3(3, -3, 4)),
+//    PointLight(vec4(1, 1, 1, 150), vec3(-3, -3, 4)),
 };
 
 /**
@@ -70,26 +70,20 @@ float normalDistribution(vec3 normal, vec3 halfway, float roughness) {
  * Statistically approximate the relative surface area where it's microsurface-details overshadow eachother
  * Uses the Schlick-GGX Method
  */
-float geometrySchlick(float NdotV, float roughness) {
+float geometrySchlick(float cosTheta, float roughness) {
     float r = roughness + 1.f;
     float k = (r * r) / 8.f;
 
-    float denom = NdotV * (1.f - k) + k;
-
-    return NdotV / denom;
+    return cosTheta / (cosTheta * (1.f - k) + k);
 }
 
 /**
  * Approximate both geoetry obstruction and geometry shadowing
- * @param normal The normal of the surface
- * @param cameraDirection The direction of the camera from the surface
- * @param lighDirection The direction of the light from the surface
+ * @param NdotV The cos angle between normal and camera direction
+ * @param NdotL The cos angle between normal and light direction
  * @param roughness The roughness of the surface
  */
-float geometrySmith(vec3 normal, vec3 cameraDirection, vec3 lightDirection, float roughness) {
-    float NdotV = max(dot(normal, cameraDirection), 0.f);
-    float NdotL = max(dot(normal, lightDirection), 0.f);
-
+float geometrySmith(float NdotV, float NdotL, float roughness) {
     float ggx2 = geometrySchlick(NdotV, roughness);
     float ggx1 = geometrySchlick(NdotL, roughness);
 
@@ -115,37 +109,45 @@ void main() {
 
     // Direct Lighting
     vec3 Lo = vec3(0.f);
-    for(int i = 0; i < 4; ++i) {
+    for(int i = 0; i < 1; ++i) {
         vec3 lightToPixel = testLights[i].lightPosition - worldPos.xyz;
 
         vec3 lightDirection = normalize(lightToPixel);
-        vec3 halfwayPoint = normalize(cameraDirection + lightDirection);
+
+        vec3 halfway = normalize(cameraDirection + lightDirection);
+
+        // cos angle between the normal and light direction
+        float NdotL = max(dot(N, lightDirection), 1.f);
+        // cos angle between the normal and camera direction
+        float NdotV = max(dot(N, cameraDirection), 1.f);
 
         float lightDistance = length(lightToPixel);
         float attenuation = 1.f / (lightDistance * lightDistance);
         vec3 radiance = testLights[i].lightColour.xyz * testLights[i].lightColour.w * attenuation;
 
-        vec3 F = fresnel(max(dot(halfwayPoint, cameraDirection), 0.f), F0);
-        float NDF = normalDistribution(N, halfwayPoint, roughness);
-        float G = geometrySmith(N, cameraDirection, lightDirection, roughness);
+        vec3 F = fresnel(max(dot(halfway, cameraDirection), 0.f), F0);
+        float NDF = normalDistribution(N, halfway, roughness);
+        float G = geometrySmith(NdotV, NdotL, roughness);
 
         // Calculate Cook Torrance BRDF
         vec3 numerator = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, cameraDirection), 0.f) * max(dot(N, lightDirection), 0.f) + 0.0001f;
+        float denominator = 4.0 * NdotV * NdotL + 0.0001f;
         vec3 specular = numerator / denominator;
 
         vec3 KD = (vec3(1.f) - F) * (1.f - metallic);
 
-        float NdotL = max(dot(N, lightDirection), 0.f);
-        Lo += (KD * albedo.xyz / PI + specular) * radiance * NdotL;
+        Lo += specular ;/*((KD * (albedo.xyz / PI)) + ); /* radiance * NdotL;*/
     }
 
-    vec3 ambient = /*sceneData.ambientColor.xyz * */ vec3(0.03) * albedo.xyz * AO;
+    vec3 ambient = /* sceneData.ambientColor.xyz */  albedo.xyz * .02 * AO;
 
     vec3 color = Lo;
 
     // HDR Tonemapping
 //    color = color / (color + vec3(1.0));
+
+    // Gamma correct
+    color = pow(color, vec3(0.4545));
 
     outFragColor = vec4(color, 1.0f);
 }

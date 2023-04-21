@@ -26,5 +26,5 @@ Mesh* SphereCollider::getRenderMesh() {
 }
 
 glm::mat4 SphereCollider::getRenderMeshTransform() {
-    return glm::scale(glm::mat4(1.f), glm::vec3(this->radius));
+    return this->getTransform();
 }

@@ -87,7 +87,7 @@ int LeicesterEngine::startLoop() {
                     Logger::info("Normal: " + glm::to_string(result.normal) + ", Distance: " + std::to_string(result.depth));
 
                     // Un-collide
-                    actor->setPosition(actor->getPosition() + (result.normal * -result.depth));
+                    actor->setLocalPosition(actor->getPosition() + (result.normal * -result.depth));
                 }
                 anyCollisions |= result.collided;
             }

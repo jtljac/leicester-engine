@@ -5,6 +5,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 /**
  * An object in the world
@@ -17,7 +18,7 @@ protected:
     /** The Object's position in the world */
     glm::vec3 position;
     /** The Object's rotation in the world */
-    glm::quat rotation;
+    glm::vec3 rotation;
     /** The Object's scale in the world */
     glm::vec3 scale;
 
@@ -27,25 +28,25 @@ protected:
     LObject* parent;
 public:
     LObject()
-            : position({0, 0, 0}), scale({1, 1, 1}), rotation(glm::quat({0, 0, 0})), parent(nullptr), enableTick(true) {}
+            : position({0, 0, 0}), scale({1, 1, 1}), rotation({0, 0, 0}), parent(nullptr), enableTick(true) {}
 
     LObject(LObject* parent, bool enableTick)
-            : position({0, 0, 0}), scale({1, 1, 1}), rotation(glm::quat({0, 0, 0})), parent(parent), enableTick(enableTick) {}
+            : position({0, 0, 0}), scale({1, 1, 1}), rotation({0, 0, 0}), parent(parent), enableTick(enableTick) {}
 
-    LObject(const glm::vec3& position, const glm::vec3& scale, const glm::quat& rotation, LObject* parent, const bool enableTick)
+    LObject(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation, LObject* parent, const bool enableTick)
             : position(position), scale(scale), rotation(rotation), parent(parent), enableTick(enableTick) {}
 
     LObject(LObject& lObject) = default;
 
     /** The function called when the object is added to the world */
-    virtual void onCreate() = 0;
+    virtual void onCreate() {};
     /**
      * The function called every frame
      * @param deltaTime The time in seconds the last frame took
      */
-    virtual void tick(double deltaTime) = 0;
+    virtual void tick(double deltaTime) {};
     /** The function called when the object is removed from the world */
-    virtual void onDestroy() = 0;
+    virtual void onDestroy() {};
 
     /**
      * Get if the object has ticking enabled
@@ -64,50 +65,94 @@ public:
     }
 
     /**
-     * Get the current position of the object in the world
-     * @return the position of the object
+     * Get the world transform of the object
+     * @return the global transform of the actor
      */
-    [[nodiscard]] virtual const glm::vec3& getPosition() const {
-        return position;
+    [[nodiscard]] virtual const glm::mat4 getTransform() const {
+        if (parent != nullptr) {
+            return getLocalTransform() * parent->getTransform();
+        } else {
+            return getLocalTransform();
+        }
     }
 
     /**
-     * Set the position of the object in the world
-     * @param position The new position of the object in the world
+     * Get the local transform of the actor
+     * @return the transform of the actor in local space
      */
-    virtual void setPosition(const glm::vec3& position) {
+    [[nodiscard]] virtual const glm::mat4 getLocalTransform() const {
+        return glm::translate(glm::mat4(1), getLocalPosition()) * glm::orientate4(getLocalRotation()) * glm::scale(glm::mat4(1), getLocalScale());
+    }
+
+    /**
+     * Get the current position of the object in local space
+     * @return the local position of the object
+     */
+    [[nodiscard]] virtual const glm::vec3& getLocalPosition() const {
+        return position;
+    }
+
+    [[nodiscard]] virtual glm::vec3 getPosition() const {
+        if (parent != nullptr) {
+            return (glm::vec3) (glm::vec4(position, 0) * parent->getTransform());
+        } else {
+            return getLocalPosition();
+        }
+    }
+
+    /**
+     * Set the position of the object in local space
+     * @param position The new position of the object in local space
+     */
+    virtual void setLocalPosition(const glm::vec3& position) {
         LObject::position = position;
     }
 
     /**
-     * Get the scale of the object
-     * @return the scale of the object
+     * Get the scale of the object in local space
+     * @return the local scale of the object
      */
-    [[nodiscard]] virtual const glm::vec3& getScale() const {
+    [[nodiscard]] virtual const glm::vec3& getLocalScale() const {
         return scale;
     }
 
+    [[nodiscard]] virtual glm::vec3 getScale() const {
+        if (parent != nullptr) {
+            return getLocalScale() + parent->getScale();
+        } else {
+            return getLocalScale();
+        }
+    }
+
     /**
-     * Set the scale of the object
-     * @param scale The new scale of the object
+     * Set the scale of the object in local space
+     * @param scale The new local scale of the object
      */
-    virtual void setScale(const glm::vec3& scale) {
+    virtual void setLocalScale(const glm::vec3& scale) {
         LObject::scale = scale;
     }
 
     /**
-     * Get the rotation of the object in the world
-     * @return the rotation of the object
+     * Get the rotation of the object in local space
+     * @return the local rotation of the object
      */
-    [[nodiscard]] virtual const glm::quat& getRotation() const {
+    [[nodiscard]] virtual const glm::vec3& getLocalRotation() const {
         return rotation;
     }
 
     /**
-     * Set the rotation of the object in the world
-     * @param rotation The new rotation of the object
+     * Set the rotation of the object in local space
+     * @param rotation The new local rotation of the object
      */
-    virtual void setRotation(const glm::quat& rotation) {
+    virtual void setLocalRotation(const glm::vec3& rotation) {
         LObject::rotation = rotation;
+    }
+
+    /**
+     * Set the parent of the LObject
+     * @param parent the new parent of the LObject
+     */
+    void setParent(LObject* parent) {
+        this->parent = parent;
     }
 };

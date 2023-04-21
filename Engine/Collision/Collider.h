@@ -8,6 +8,7 @@
 #include <glm/mat4x4.hpp>
 #include <Engine/BoundingBox.h>
 #include "Mesh/Mesh.h"
+#include <Engine/LObject.h>
 
 enum class CollisionMode {
     QUERY,
@@ -15,7 +16,7 @@ enum class CollisionMode {
     NONE
 };
 
-struct Collider {
+struct Collider : public LObject {
     bool isColliding = false;
     CollisionMode collisionMode;
 

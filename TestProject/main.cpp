@@ -24,36 +24,36 @@ Scene* collisionScene() {
 
 
     Actor* collisionObject = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
-    collisionObject->setPosition(glm::vec3(3, 3, 3));
+    collisionObject->setLocalPosition(glm::vec3(3, 3, 3));
     scene->addActorToScene(collisionObject);
 
     Actor* collisionObject2 = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
-    collisionObject2->setPosition(glm::vec3(-3, 3, 3));
+    collisionObject2->setLocalPosition(glm::vec3(-3, 3, 3));
     scene->addActorToScene(collisionObject2);
 
     Actor* collisionObject3 = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
-    collisionObject3->setPosition(glm::vec3(3, -3, 3));
+    collisionObject3->setLocalPosition(glm::vec3(3, -3, 3));
     scene->addActorToScene(collisionObject3);
 
     Actor* collisionObject4 = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
-    collisionObject4->setPosition(glm::vec3(-3, -3, 3));
+    collisionObject4->setLocalPosition(glm::vec3(-3, -3, 3));
     scene->addActorToScene(collisionObject4);
 
     Actor* collisionObject5 = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
-    collisionObject5->setPosition(glm::vec3(3, 3, -3));
+    collisionObject5->setLocalPosition(glm::vec3(3, 3, -3));
     scene->addActorToScene(collisionObject5);
 
     Actor* collisionObject6 = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
-    collisionObject6->setPosition(glm::vec3(-3, 3, -3));
+    collisionObject6->setLocalPosition(glm::vec3(-3, 3, -3));
     scene->addActorToScene(collisionObject6);
 
     Actor* collisionObject7 = new Actor(nullptr, new AABBCollider(CollisionMode::BLOCK, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}));
-    collisionObject7->setPosition(glm::vec3(3, -3, -3));
+    collisionObject7->setLocalPosition(glm::vec3(3, -3, -3));
     scene->addActorToScene(collisionObject7);
 
     Actor* collisionObject8 = new Actor(nullptr, new MeshCollider(CollisionMode::BLOCK, Mesh::createNewMeshFromFile(FileUtils::getAssetsPath() + "/Shapes/Diamond.lmesh")));
 
-    collisionObject8->setPosition(glm::vec3(-3, -3, -3));
+    collisionObject8->setLocalPosition(glm::vec3(-3, -3, -3));
     scene->addActorToScene(collisionObject8);
 
     Actor* monkey = new ControlledActor(new StaticMesh(mesh, triangleMaterial),
@@ -75,24 +75,28 @@ Scene *pbrScene() {
     texArray.push_back(Texture::createNewTextureFromFile(FileUtils::getAssetsPath() + "/PBR Example/rustediron2_roughness.ltex"));
     Material* mat = new Material("/meshtriangle.vert.spv", "/PBR Example/pbr_sphere.frag.spv", ShaderType::OPAQUE, texArray);
     StaticMesh* staticMesh = new StaticMesh(mesh, mat);
+    StaticMesh* staticMesh2 = new StaticMesh(mesh, mat);
+    StaticMesh* staticMesh3 = new StaticMesh(mesh, mat);
+    StaticMesh* staticMesh4 = new StaticMesh(mesh, mat);
 
     Actor* sphere1 = new Actor(staticMesh, nullptr);
-    sphere1->setPosition(glm::vec3(-2, 2, 0));
+    sphere1->setLocalPosition(glm::vec3(-2, 2, 0));
     scene->addActorToScene(sphere1);
 
-    Actor* sphere2 = new Actor(staticMesh, nullptr);
-    sphere2->setPosition(glm::vec3(2, 2, 0));
+    Actor* sphere2 = new Actor(staticMesh2, nullptr);
+    sphere2->setLocalPosition(glm::vec3(2, 2, 0));
     scene->addActorToScene(sphere2);
 
-    Actor* sphere3 = new Actor(staticMesh, nullptr);
-    sphere3->setPosition(glm::vec3(-2, -2, 0));
+    Actor* sphere3 = new Actor(staticMesh3, nullptr);
+    sphere3->setLocalPosition(glm::vec3(-2, -2, 0));
     scene->addActorToScene(sphere3);
 
-    Actor* sphere4 = new Actor(staticMesh, nullptr);
-    sphere4->setPosition(glm::vec3(2, -2, 0));
+    Actor* sphere4 = new Actor(staticMesh4, nullptr);
+    sphere4->setLocalPosition(glm::vec3(2, -2, 0));
     scene->addActorToScene(sphere4);
 
     Actor* controlled = new ControlledActor(nullptr, nullptr);
+    controlled->setLocalPosition(glm::vec3(0, 0, -3));
     scene->addActorToScene(controlled);
     scene->setControlledActor(controlled);
 

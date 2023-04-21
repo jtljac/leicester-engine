@@ -13,7 +13,7 @@ protected:
 public:
     EngineSettings settings;
 
-    Scene* currentScene;
+    Scene* currentScene = nullptr;
 
     virtual int initialise();
 

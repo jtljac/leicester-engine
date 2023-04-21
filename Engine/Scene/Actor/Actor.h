@@ -22,7 +22,7 @@ struct Actor : public LObject {
 
     Actor(StaticMesh *mesh, Collider *collider);
     Actor(StaticMesh* mesh, Collider* collider, const glm::vec3& position, const glm::vec3& scale,
-          const glm::quat& rotation);
+          const glm::vec3& rotation);
     Actor(const Actor& otherActor);
 
     void onCreate() override;

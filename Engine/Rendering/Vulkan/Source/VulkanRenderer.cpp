@@ -16,6 +16,8 @@
 #include "../VkShortcuts.h"
 
 #include <Rendering/Vulkan/VTexture.h>
+#include <iostream>
+#include <glm/gtx/string_cast.hpp>
 
 /* ========================================= */
 /* Setup                                     */
@@ -240,7 +242,6 @@ bool VulkanRenderer::initGBuffers(EngineSettings& settings) {
 
     // Position, albedo, normal
     for (GBufferData* gBufferData: iter) {
-        gBufferData->format = VK_FORMAT_R8G8B8A8_SRGB;
         VKShortcuts::createAllocatedImage(this->allocator,
                                           gBufferData->format,
                                           gBufferExtent,
@@ -1047,19 +1048,16 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     {
         // Camera Buffer
         {
-            glm::vec3 camPos = {0.f, 0.f, -10.f};
-            const glm::mat4& viewMat = glm::translate(glm::mat4(1.f), camPos) *
-                                       glm::mat4_cast(scene.controlledActor->getRotation());
+            const glm::mat4& viewMat = scene.controlledActor->getTransform();
             GpuCameraData cameraData = {
                     {
-                            viewMat,
+                            glm::inverse(viewMat),
                             glm::perspective(glm::radians(90.f),
                                              ((float) settings->windowWidth) / ((float) settings->windowHeight), 0.1f,
                                              200.f)
                     },
                     {
-                            // TODO: The viewMat can be handled better
-                            (glm::vec3) (viewMat * glm::vec4(1))
+                            scene.controlledActor->getPosition()
                     }
             };
 
@@ -1127,10 +1125,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
 
             for (int i = 0; i < toRender.size(); ++i) {
                 const Actor* actor = toRender[i];
-                glm::mat4 model = glm::translate(glm::mat4(1.f), actor->getPosition());
-                model = glm::scale(model, actor->getScale());
-                model = model * glm::mat4_cast(actor->getRotation());
-                objectSSBO[i].modelMatrix = model;
+                objectSSBO[i].modelMatrix = actor->actorMesh->getTransform();
             }
 
             for (int i = 0; i < toRenderCollision.size(); ++i) {
@@ -1350,7 +1345,7 @@ VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer)
 }
 
 VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer, VkCommandBuffer)>&& function) {
-        // Command Buffer
+    // Command Buffer
     VkResult result;
     {
         result = function(transferContext.commandBuffer, globalGraphicsContext.commandBuffer);
@@ -1369,13 +1364,15 @@ VkResult VulkanRenderer::executeTransfer(std::function<VkResult(VkCommandBuffer,
     };
     vkQueueSubmit(transferQueue, 1, &transferSubmitInfo, VK_NULL_HANDLE);
 
+
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     VkSubmitInfo graphicsSubmitInfo {
         VK_STRUCTURE_TYPE_SUBMIT_INFO,
         nullptr,
 
         1,
         &transferContext.transferSemaphore,
-        nullptr,
+        &waitStage,
         1,
         &globalGraphicsContext.commandBuffer,
         0,

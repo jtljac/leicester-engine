@@ -29,6 +29,6 @@ Mesh* MeshCollider::getRenderMesh() {
 }
 
 glm::mat4 MeshCollider::getRenderMeshTransform() {
-    return glm::mat4(1);
+    return this->getTransform();
 }
 
