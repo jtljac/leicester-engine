@@ -7,6 +7,6 @@
 #include <glm/vec2.hpp>
 
 struct Vertex {
-    glm::vec3 pos, normal, colour;
+    glm::vec3 pos, normal, tangent, colour;
     glm::vec2 uv;
 };

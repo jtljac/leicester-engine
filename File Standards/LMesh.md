@@ -25,6 +25,7 @@ Vec2 {
 Vertex {
     Vec     position
     Vec     normal
+    Vec     tangent
     Vec     colour
     Vec2    uv
 }

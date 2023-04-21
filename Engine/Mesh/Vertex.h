@@ -7,9 +7,9 @@
 #include <glm/vec2.hpp>
 
 struct Vertex {
-    glm::vec3 position, normal, colour;
+    glm::vec3 position, normal, tangent, colour;
     glm::vec2 uv;
 
     Vertex() = default;
-    Vertex(glm::vec3 position, glm::vec3 normal, glm::vec3 colour, glm::vec2 uv);
+    Vertex(glm::vec3 position, glm::vec3 normal, glm::vec3 tangent, glm::vec3 colour, glm::vec2 uv);
 };

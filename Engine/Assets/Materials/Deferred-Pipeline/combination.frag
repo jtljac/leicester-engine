@@ -29,7 +29,7 @@ layout(set=1, binding=3) uniform sampler2D normalTex;
 
 // Hardcode lights for now
 PointLight testLights[1] = {
-    PointLight(vec4(1, 1, 1, 50), vec3(0, 4, 0))
+    PointLight(vec4(1, 1, 1, 1), vec3(0, 4, 0))
 //    PointLight(vec4(1, 1, 1, 150), vec3(-3, 3, 4)),
 //    PointLight(vec4(1, 1, 1, 150), vec3(3, -3, 4)),
 //    PointLight(vec4(1, 1, 1, 150), vec3(-3, -3, 4)),
@@ -136,7 +136,7 @@ void main() {
 
         vec3 KD = (vec3(1.f) - F) * (1.f - metallic);
 
-        Lo += specular ;/*((KD * (albedo.xyz / PI)) + ); /* radiance * NdotL;*/
+        Lo += ((KD * (albedo.xyz / PI)) + specular) * radiance * NdotL;
     }
 
     vec3 ambient = /* sceneData.ambientColor.xyz */  albedo.xyz * .02 * AO;
@@ -144,7 +144,7 @@ void main() {
     vec3 color = Lo;
 
     // HDR Tonemapping
-//    color = color / (color + vec3(1.0));
+    color = color / (color + vec3(1.0));
 
     // Gamma correct
     color = pow(color, vec3(0.4545));

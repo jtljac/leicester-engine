@@ -39,22 +39,33 @@ VertexDescription VertexDescription::getVertexDescription() {
         description.attributes.push_back(normAttributeDescription);
     }
 
-    // Colour (Location 2)
+    // Tangent (Location 2)
+    {
+        VkVertexInputAttributeDescription tangAttributeDescription = {};
+        tangAttributeDescription.binding = 0;
+        tangAttributeDescription.location = 2;
+        tangAttributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
+        tangAttributeDescription.offset = offsetof(Vertex, tangent);
+
+        description.attributes.push_back(tangAttributeDescription);
+    }
+
+    // Colour (Location 3)
     {
         VkVertexInputAttributeDescription colAttributeDescription = {};
         colAttributeDescription.binding = 0;
-        colAttributeDescription.location = 2;
+        colAttributeDescription.location = 3;
         colAttributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
         colAttributeDescription.offset = offsetof(Vertex, colour);
 
         description.attributes.push_back(colAttributeDescription);
     }
 
-    // UV (Location 3)
+    // UV (Location 4)
     {
         VkVertexInputAttributeDescription uvAttributeDescription = {};
         uvAttributeDescription.binding = 0;
-        uvAttributeDescription.location = 3;
+        uvAttributeDescription.location = 4;
         uvAttributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
         uvAttributeDescription.offset = offsetof(Vertex, uv);
 

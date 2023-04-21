@@ -6,6 +6,8 @@ layout (location = 2) in vec3 inNormal;
 layout (location = 3) in vec3 inTangent;
 layout (location = 4) in vec2 texCoord;
 
+layout (location = 5) in mat3 TBN;
+
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outAlbedo;
 layout (location = 2) out vec4 outMetallicRoughnessAo;
@@ -37,5 +39,5 @@ void main() {
     outPosition = vec4(inPosition, 1.f);
     outAlbedo = vec4(colour, 1.f);
     outMetallicRoughnessAo = vec4(metallicComp, roughnessComp, 1, 1.f);
-    outNormal = vec4(inNormal, 1.f);
+    outNormal = vec4(normalize(TBN * normal), 1.f);
 }

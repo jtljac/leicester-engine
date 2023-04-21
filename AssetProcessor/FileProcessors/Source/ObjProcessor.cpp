@@ -7,6 +7,7 @@
 #define GLM_EXT_INCLUDED
 #include <glm/vec3.hpp>
 #include <glm/gtx/hash.hpp>
+#include <numeric>
 
 #include "../../DataTypes/Vertex.h"
 
@@ -46,28 +47,62 @@ void ObjProcessor::processFile(const std::string& src, const std::string& dest) 
             if (uniqueVertices.count(position) == 0) {
                 uniqueVertices[position] = static_cast<uint32_t>(vertices.size());
                 vertices.push_back({
-                                           position,
-                                           {
-                                                   attrib.normals[3*index.normal_index + 0],
-                                                   attrib.normals[3*index.normal_index + 1],
-                                                   attrib.normals[3*index.normal_index + 2]
-                                           },
-                                           {
-                                                   attrib.colors[3*index.vertex_index + 0],
-                                                   attrib.colors[3*index.vertex_index + 1],
-                                                   attrib.colors[3*index.vertex_index + 2]
-                                           },
-                                           {
-                                                   attrib.texcoords[2 * index.texcoord_index + 0],
-                                                   -attrib.texcoords[2 * index.texcoord_index + 1],
+                        position,
+                        {
+                                attrib.normals[3*index.normal_index + 0],
+                                attrib.normals[3*index.normal_index + 1],
+                                attrib.normals[3*index.normal_index + 2]
+                        },
+                        {0, 0, 0}, // Placeholder
+                        {
+                                attrib.colors[3*index.vertex_index + 0],
+                                attrib.colors[3*index.vertex_index + 1],
+                                attrib.colors[3*index.vertex_index + 2]
+                        },
+                        {
+                                attrib.texcoords[2 * index.texcoord_index + 0],
+                               -attrib.texcoords[2 * index.texcoord_index + 1],
 
-                                           }
-                                   });
+                        }
+                });
             }
-
             indices.push_back(uniqueVertices[position]);
         }
     }
+
+    /*
+        calculate tangents
+        Source: https://learnopengl.com/Advanced-Lighting/Normal-Mapping
+        License: CC BY-NC 4.0
+     */
+    std::vector<std::vector<glm::vec3>> tangents(vertices.size());
+    for (int i = 0; i < indices.size(); i += 3) {
+        Vertex a = vertices.at(indices[i+0]);
+        Vertex b = vertices.at(indices[i+1]);
+        Vertex c = vertices.at(indices[i+2]);
+
+        glm::vec3 edge1 = b.pos - a.pos;
+        glm::vec3 edge2 = c.pos - a.pos;
+        glm::vec2 deltaUV1 = b.uv - a.uv;
+        glm::vec2 deltaUV2 = c.uv - a.uv;
+
+        float f = 1.f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+        glm::vec3 tangent = {
+                f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x),
+                f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y),
+                f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z)
+        };
+
+        tangents.at(indices[i+0]).push_back(tangent);
+        tangents.at(indices[i+1]).push_back(tangent);
+        tangents.at(indices[i+2]).push_back(tangent);
+    }
+
+    for (int i = 0; i < tangents.size(); ++i) {
+        std::vector<glm::vec3>& tangentList = tangents.at(i);
+        vertices.at(i).tangent = std::reduce(tangentList.begin(), tangentList.end()) / (float) tangentList.size();
+    }
+
     ObjProcessor::writeMesh(replaceExtension(dest, "lmesh"), vertices, indices);
 }
 
