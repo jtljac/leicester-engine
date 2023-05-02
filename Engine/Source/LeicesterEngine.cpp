@@ -105,8 +105,12 @@ int LeicesterEngine::startLoop() {
 }
 
 void LeicesterEngine::setScene(Scene* scene) {
-    if (currentScene != nullptr) delete currentScene;
+    if (currentScene != nullptr) {
+        currentScene->onDestroy();
+        delete currentScene;
+    }
 
     currentScene = scene;
     collisionEngine->scene = this->currentScene;
+    currentScene->onCreate();
 }
