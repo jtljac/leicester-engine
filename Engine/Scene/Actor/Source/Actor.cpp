@@ -18,16 +18,21 @@ Actor::Actor(const Actor& otherActor) : actorMesh(otherActor.actorMesh), actorCo
 
 
 void Actor::onCreate() {
-
+    if (actorMesh != nullptr) actorMesh->onCreate();
+    if (actorCollider != nullptr) actorCollider->onCreate();
 }
 
 
 void Actor::tick(double deltaTime) {
+    if (actorMesh != nullptr) actorMesh->tick(deltaTime);
+    if (actorCollider != nullptr) actorCollider->tick(deltaTime);
+
 //    rotation = normalize(rotation * glm::quat({0, deltaTime, 0}));
 }
 
 void Actor::onDestroy() {
-
+    if (actorMesh != nullptr) actorMesh->onDestroy();
+    if (actorCollider != nullptr) actorCollider->onDestroy();
 }
 
 

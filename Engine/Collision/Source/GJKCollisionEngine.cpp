@@ -100,8 +100,8 @@ glm::vec3 GJKCollisionEngine::getSupportPoint(Actor* actor1, Actor* actor2, glm:
     const Collider* a = actor1->actorCollider;
     const Collider* b = actor2->actorCollider;
 
-    glm::vec3 aPos = a->findFurthestPointInDirection(direction) + actor1->getPosition();
-    glm::vec3 bPos = b->findFurthestPointInDirection(-direction) + actor2->getPosition();
+    glm::vec3 aPos = a->findFurthestPointInDirection(direction) + a->getPosition();
+    glm::vec3 bPos = b->findFurthestPointInDirection(-direction) + b->getPosition();
 
     return aPos - bPos;
 }

@@ -26,6 +26,7 @@ void Scene::tick(double deltaTime) {
 void Scene::onDestroy() {
     for (auto& actor : actors) {
         actor->onDestroy();
+        delete actor;
     }
 }
 
