@@ -94,7 +94,7 @@ public:
 
     [[nodiscard]] virtual glm::vec3 getPosition() const {
         if (parent != nullptr) {
-            return (glm::vec3) (glm::vec4(position, 0) * parent->getTransform());
+            return (glm::vec3) (parent->getTransform() * glm::vec4(position, 1));
         } else {
             return getLocalPosition();
         }

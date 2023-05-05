@@ -294,10 +294,10 @@ bool VulkanRenderer::initSamplers(EngineSettings& settings) {
 bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
     // Descriptor Pool
     std::vector<VkDescriptorPoolSize> sizes = {
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10},
-            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
-            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 20},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 20},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 20},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 20}
     };
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
@@ -305,7 +305,7 @@ bool VulkanRenderer::initDescriptors(EngineSettings& settings) {
     descriptorPoolCreateInfo.pNext = nullptr;
 
     descriptorPoolCreateInfo.flags = 0;
-    descriptorPoolCreateInfo.maxSets = 10;
+    descriptorPoolCreateInfo.maxSets = 30;
     descriptorPoolCreateInfo.poolSizeCount = (uint32_t) sizes.size();
     descriptorPoolCreateInfo.pPoolSizes = sizes.data();
 
@@ -1131,7 +1131,7 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
             for (int i = 0; i < toRenderCollision.size(); ++i) {
                 const Actor* actor = toRenderCollision[i];
 
-                glm::mat4 model = glm::translate(actor->actorCollider->getRenderMeshTransform(), actor->getPosition());
+                glm::mat4 model = actor->actorCollider->getRenderMeshTransform();
                 objectSSBO[i + toRender.size()].modelMatrix = model;
             }
 
@@ -1171,7 +1171,11 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
 
         uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * swapchainIndex;
         vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
-                                0, 1, &frame.globalDescriptor, 1, &uniformOffset);
+                                0, 1, &frame.globalDescriptor, 1, &swapchainUniformOffset);
+        vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                1, 1, &frame.deferredPassDescriptor, 0, nullptr);
+        vkCmdBindDescriptorSets(frame.deferredCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vMat.pipelineLayout,
+                                2, 1, &vMat.materialDescriptor, 0, nullptr);
 
         for (int i = 0; i < toRenderCollision.size(); ++i) {
             const Actor* actor = toRenderCollision[i];

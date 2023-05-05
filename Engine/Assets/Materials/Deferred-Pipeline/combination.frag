@@ -36,11 +36,11 @@ layout(set=1, binding=2) uniform sampler2D metallicRoughtnessAOTex;
 layout(set=1, binding=3) uniform sampler2D normalTex;
 
 // Hardcode lights for now
-PointLight testLights[1] = {
-    PointLight(vec4(1, 1, 1, 1), vec3(0, 4, 0))
-//    PointLight(vec4(1, 1, 1, 150), vec3(-3, 3, 4)),
-//    PointLight(vec4(1, 1, 1, 150), vec3(3, -3, 4)),
-//    PointLight(vec4(1, 1, 1, 150), vec3(-3, -3, 4)),
+PointLight testLights[4] = {
+    PointLight(vec4(1, 1, 1, 1), vec3(4, 4, -3)),
+    PointLight(vec4(1, 1, 1, 1), vec3(-4, 4, -3)),
+    PointLight(vec4(1, 1, 1, 1), vec3(4,-4, -3)),
+    PointLight(vec4(1, 1, 1, 1), vec3(-4,-4, -3)),
 };
 
 /**
@@ -117,7 +117,7 @@ void main() {
 
     // Direct Lighting
     vec3 Lo = vec3(0.f);
-    for(int i = 0; i < 1; ++i) {
+    for(int i = 0; i < 4; ++i) {
         vec3 lightToPixel = testLights[i].lightPosition - worldPos.xyz;
 
         vec3 lightDirection = normalize(lightToPixel);
@@ -149,13 +149,13 @@ void main() {
 
     vec3 ambient = /* sceneData.ambientColor.xyz */  albedo.xyz * .02 * AO;
 
-    vec3 color = Lo;
+    vec3 color = Lo + ambient;
 
     // HDR Tonemapping
-    color = color / (color + vec3(1.0));
-
-    // Gamma correct
-    color = pow(color, vec3(0.4545));
+//    color = color / (color + vec3(1.0));
+//
+//    // Gamma correct
+//    color = pow(color, vec3(0.4545));
 
     outFragColor = vec4(color, 1.0f);
 }

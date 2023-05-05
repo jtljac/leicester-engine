@@ -6,6 +6,8 @@ layout (location = 2) in vec3 inNormal;
 layout (location = 3) in vec3 inTangent;
 layout (location = 4) in vec2 texCoord;
 
+layout (location = 5) in mat3 TBN;
+
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outAlbedo;
 layout (location = 2) out vec4 outMetallicRoughnessAo;
@@ -24,8 +26,9 @@ layout(set=0, binding=2) uniform SceneData {
 } sceneData;
 
 void main() {
-    outPosition = vec4(inPosition, 1.0f);
-    outAlbedo = vec4(inColour, 1.0f);
-    outMetallicRoughnessAo = vec4(0.f, 1.f, 1.f, 1.0f);
-    outNormal = vec4(inNormal, 1.0f);
+
+    outPosition = vec4(inPosition, 1.f);
+    outAlbedo = vec4(0, 1, 0, 1.f);
+    outMetallicRoughnessAo = vec4(1, .2, 1, 1);
+    outNormal = vec4(inNormal, 0);
 }

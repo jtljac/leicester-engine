@@ -1,3 +1,12 @@
+/**
+ * The implementations for this shader has been created by following these tutorials:
+ * https://learnopengl.com/PBR/Theory
+ * https://learnopengl.com/PBR/Lighting
+ * https://github.com/SaschaWillems/Vulkan/tree/master/data/shaders/glsl/pbrbasic
+ *
+ * Their implementations have been mixed and optimised, with edits made to make the implementation fit with this project
+ */
+
 #version 450
 
 layout (location = 0) out vec2 outUv;

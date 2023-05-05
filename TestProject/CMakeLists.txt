@@ -6,6 +6,7 @@ target_link_libraries(leicester-game leicester-engine)
 
 target_sources(leicester-game PRIVATE
         ControlledActor.cpp
+        RockingActor.cpp
 )
 
 set(assetDest "${CMAKE_CURRENT_BINARY_DIR}/Assets"  CACHE INTERNAL "")

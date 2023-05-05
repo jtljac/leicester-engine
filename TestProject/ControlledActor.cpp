@@ -24,7 +24,7 @@ void ControlledActor::handleMouse(double mouseX, double mouseY) {
     lastMouseX = mouseX;
     lastMouseY = mouseY;
 
-    rotation += glm::vec3(deltaY * .01, deltaX * .01, 0);
+    rotation += glm::vec3(deltaY * .01, 0, deltaX * -.01);
 }
 
 
