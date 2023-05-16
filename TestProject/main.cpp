@@ -118,8 +118,8 @@ Scene* collisionTestScene() {
     Actor* collisionObject14 = new RockingActor(nullptr, new AABBCollider(CollisionMode::QUERY, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}), {0,0,0}, 5);
     collisionObject14->setLocalPosition(glm::vec3(0, 0, 0));
     scene->addActorToScene(collisionObject14);
-//
-//    // Colliders 2
+
+    // Colliders 2
     Actor* collisionObject21 = new Actor(nullptr, new AABBCollider(CollisionMode::QUERY, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
     collisionObject21->setLocalPosition(glm::vec3(0, 0, 4));
     scene->addActorToScene(collisionObject21);
@@ -136,7 +136,7 @@ Scene* collisionTestScene() {
     collisionObject24->setLocalPosition(glm::vec3(0, 0, 4));
     scene->addActorToScene(collisionObject24);
 
-//     Colliders 3
+    // Colliders 3
     Actor* collisionObject31 = new Actor(nullptr, new AABBCollider(CollisionMode::QUERY, {-0.5, -0.5, -0.5}, {0.5, 0.5, 0.5}));
     collisionObject31->setLocalPosition(glm::vec3(0, 0, -4));
     scene->addActorToScene(collisionObject31);
@@ -222,7 +222,7 @@ int main() {
 
 //    engine.setScene(collisionScene());
 //    engine.setScene(pbrTest());
-//    engine.setScene(collisionTestScene());
-    engine.setScene(collisionResponseTestScene());
+    engine.setScene(collisionTestScene());
+//    engine.setScene(collisionResponseTestScene());
     engine.startLoop();
 }

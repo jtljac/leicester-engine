@@ -10,8 +10,6 @@ void RockingActor::tick(double deltaTime) {
     counter += deltaTime;
     glm::vec3 newPos = origin + glm::vec3(sin(counter / 2) * distance, 0, 0);
     this->setLocalPosition(newPos);
-
-    Logger::info(std::to_string(deltaTime));
 }
 
 RockingActor::RockingActor(StaticMesh* mesh, Collider* collider, glm::vec3 origin, const float distance)

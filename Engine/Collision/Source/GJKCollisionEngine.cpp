@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include "../GJKCollisionEngine.h"
+#include <glm/gtx/string_cast.hpp>
 #include "Utils/Logger.h"
 
 const static glm::vec3 ORIGIN = glm::vec3(0);
@@ -133,7 +134,6 @@ CollisionResult GJKCollisionEngine::testCollision(Actor* actor1, Actor* actor2) 
         else if (state == GJKState::MISS) return CollisionResult{false};
         --i;
     }
-
     return CollisionResult{false};
 }
 
@@ -158,7 +158,7 @@ size_t GJKCollisionEngine::getFaceNormals(std::vector<glm::vec3>& polytope, std:
         destNormals.emplace_back(normal, distance);
 
         if (distance < minDistance) {
-            minTriangle = i;
+            minTriangle = I;
             minDistance = distance;
         }
     }
@@ -185,17 +185,17 @@ CollisionResult GJKCollisionEngine::epa(std::vector<glm::vec3>& polytope, Actor*
     // Calculate the normals of the existing faces
     // Normal and distance packed into vec4 to avoid making a one-off structure
     std::vector<glm::vec4> normals;
-    size_t minFace = getFaceNormals(polytope, indices, normals);
+    size_t minIndex = getFaceNormals(polytope, indices, normals);
 
     glm::vec3 minNormal;
     float minDistance = std::numeric_limits<float>::max();
 
     while (minDistance == std::numeric_limits<float>::max()) {
-        if (polytope.size() > 1000) {
+        if (polytope.size() > 30) {
             return {false};
         }
-        minNormal = glm::vec3(normals[minFace]);
-        minDistance = normals[minFace].w;
+        minNormal = glm::vec3(normals[minIndex]);
+        minDistance = normals[minIndex].w;
 
         // Calculate a new support point from the normal with the shortest distance
         glm::vec3 newPoint = getSupportPoint(actor1, actor2, minNormal);
@@ -203,6 +203,7 @@ CollisionResult GJKCollisionEngine::epa(std::vector<glm::vec3>& polytope, Actor*
 
         // If the distance isn't the same (within a margin), add the new point to the polytope and repair the faces
         if (std::abs(sDistance - minDistance) > 0.001f) {
+            minDistance = std::numeric_limits<float>::max();
 
             // Iterate through the normals and remove all the faces whose edges are in the same direction as the support point
             std::vector<std::pair<size_t, size_t>> uniqueEdges;
@@ -230,25 +231,32 @@ CollisionResult GJKCollisionEngine::epa(std::vector<glm::vec3>& polytope, Actor*
             }
 
             // Use the unique edges to build new faces
-            std::vector<size_t> newFaces;
+            std::vector<size_t> newIndices;
             for (auto& edge: uniqueEdges) {
-                newFaces.push_back(edge.first);
-                newFaces.push_back(edge.second);
-                newFaces.push_back(polytope.size());
+                newIndices.push_back(edge.first);
+                newIndices.push_back(edge.second);
+                newIndices.push_back(polytope.size());
             }
             polytope.push_back(newPoint);
 
             // Calculate the normals for the new faces
             std::vector<glm::vec4> newNormals;
-            size_t newMinFace = getFaceNormals(polytope, newFaces, newNormals);
+            size_t newMinIndex = getFaceNormals(polytope, newIndices, newNormals);
+
+            float oldMinDistance = std::numeric_limits<float>::max();
+            for (size_t i = 0; i < normals.size(); ++i) {
+                if (normals[i].w < oldMinDistance) {
+                    oldMinDistance = normals[i].w;
+                    minIndex = i;
+                }
+            }
 
             // If the new normal is further, update the min face
-            if (newNormals[newMinFace].w < minDistance) {
-                minFace = newMinFace + normals.size();
+            if (newNormals[newMinIndex].w < oldMinDistance) {
+                minIndex = newMinIndex + normals.size();
             }
-            minDistance = std::numeric_limits<float>::max();
 
-            indices.insert(indices.end(), newFaces.begin(), newFaces.end());
+            indices.insert(indices.end(), newIndices.begin(), newIndices.end());
             normals.insert(normals.end(), newNormals.begin(), newNormals.end());
         }
     }

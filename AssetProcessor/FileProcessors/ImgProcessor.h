@@ -6,6 +6,7 @@
 
 
 #include <vector>
+#include <cstdint>
 #include "BaseProcessor.h"
 
 enum class TextureFormat : uint8_t {

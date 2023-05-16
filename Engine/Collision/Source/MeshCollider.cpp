@@ -12,16 +12,17 @@ BoundingBox MeshCollider::getBoundingBox() {
 }
 
 glm::vec3 MeshCollider::findFurthestPointInDirection(glm::vec3 direction) const {
-    glm::vec3 maxPoint;
-    float maxDistance = 0;
-    for (const auto& vertex: mesh->vertices) {
-        float distance = glm::dot(vertex.position, direction);
+    int maxVert = 0;
+    float maxDistance = glm::dot(direction, mesh->vertices.at(0).position);
+    for (int i = 1; i < mesh->vertices.size(); ++i) {
+        glm::vec3& vertex = mesh->vertices.at(i).position;
+        float distance = glm::dot(direction, vertex);
         if (distance > maxDistance) {
             maxDistance = distance;
-            maxPoint = vertex.position;
+            maxVert = i;
         }
     }
-    return maxPoint;
+    return mesh->vertices.at(maxVert).position;
 }
 
 Mesh* MeshCollider::getRenderMesh() {

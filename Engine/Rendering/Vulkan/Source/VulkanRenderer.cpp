@@ -204,7 +204,8 @@ bool VulkanRenderer::initSwapchain(EngineSettings& settings) {
             .use_default_format_selection()
             .set_desired_extent(settings.windowWidth, settings.windowHeight)
             .set_desired_min_image_count(settings.bufferCount)
-            .set_desired_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR)
+//            .set_desired_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR)
+            .set_desired_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR)
             .add_fallback_present_mode(VkPresentModeKHR::VK_PRESENT_MODE_IMMEDIATE_KHR)
             .build();
 
@@ -240,7 +241,7 @@ bool VulkanRenderer::initGBuffers(EngineSettings& settings) {
         &this->deferredFrameData.normal
     };
 
-    // Position, albedo, normal
+    // Position, albedo, normal, metallicRoughnessAO
     for (GBufferData* gBufferData: iter) {
         VKShortcuts::createAllocatedImage(this->allocator,
                                           gBufferData->format,
@@ -1048,7 +1049,8 @@ void VulkanRenderer::drawFrame(const double deltaTime, const double gameTime, co
     {
         // Camera Buffer
         {
-            const glm::mat4& viewMat = scene.controlledActor->getTransform();
+            glm::mat4 viewMat = scene.controlledActor->getTransform();
+            viewMat = glm::translate(viewMat, glm::vec3(0, 0, 10));
             GpuCameraData cameraData = {
                     {
                             glm::inverse(viewMat),
